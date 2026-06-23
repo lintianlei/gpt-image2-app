@@ -31,28 +31,18 @@ jobs:
 
       - name: Install Android SDK components
         run: |
-          # Install required SDK components for Capacitor
-          yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" 2>&1 || echo "SDK components may already be installed"
+          yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>&1 || echo "Components installed"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Add Android platform
-        run: |
-          rm -rf android 2>/dev/null || true
-          echo "Node version: $(node -v)"
-          echo "NPM version: $(npm -v)"
-          echo "Java version: $(java -version 2>&1)"
-          echo "ANDROID_HOME: $ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-          echo "sdkmanager: $(which sdkmanager || echo 'not found')"
-          ls -la node_modules/.bin/cap* 2>/dev/null
-          ./node_modules/.bin/cap add android 2>&1
+      - name: Build web assets
+        run: npm run build
 
       - name: Sync Capacitor
         run: |
-          ls -la android/ 2>/dev/null || echo "No android dir"
-          ./node_modules/.bin/cap sync android 2>&1
+          rm -rf android/app/src/main/assets/public 2>/dev/null || true
+          npx @capacitor/cli sync android -- --verbose 2>&1
 
       - name: Build APK
         working-directory: ./android

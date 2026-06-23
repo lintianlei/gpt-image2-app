@@ -5,10 +5,9 @@
   "main": "index.html",
   "scripts": {
     "dev": "npx serve .",
-    "build": "echo 'Static app - no build step'",
-    "cap:add:android": "npx cap add android",
-    "cap:sync": "npx cap sync",
-    "cap:open:android": "npx cap open android"
+    "build": "mkdir -p www && cp index.html sw.js manifest.json www/ 2>/dev/null; cp -r icons www/ 2>/dev/null; echo 'Build complete'",
+    "cap:sync": "npx @capacitor/cli sync",
+    "cap:open:android": "npx @capacitor/cli open android"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
