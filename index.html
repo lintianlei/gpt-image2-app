@@ -42,6 +42,8 @@ body.light-mode .prompt-tag{background:#E8E8F0;color:#7C3AED;}
 body.light-mode .prompt-title{color:#1A1A2E;}
 body.light-mode .prompt-desc{color:#6B6B7B;}
 body.light-mode .toggle-switch{background:#7C3AED;}
+body.light-mode .img-cell.loading{background:#E8E8F0;}
+body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .status-bar{height:44px;display:flex;align-items:center;padding:0 24px;font-size:14px;font-weight:600;}
 .page{display:none;flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 100px;} /* extra bottom padding to avoid tab bar overlap */
 .page.active{display:block;}
@@ -116,6 +118,10 @@ body.light-mode .toggle-switch{background:#7C3AED;}
 .loading-overlay.show{opacity:1;pointer-events:all;}
 .spinner{width:40px;height:40px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}
+.img-cell.loading{background:#1E1E2A;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;min-height:140px;}
+.img-cell.loading::after{content:'';width:28px;height:28px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;}
+.img-cell.loading .loading-text{font-size:11px;color:#6B6B7B;}
 </style>
 </head>
 <body>
@@ -533,17 +539,23 @@ async function handleGenerate(){
     return;
   }
 
-  const loading=document.getElementById('loading');
-  loading.classList.add('show');
+  const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
+
+  // Show result section with loading placeholders immediately
+  const section=document.getElementById('resultSection');
+  const grid=document.getElementById('resultGrid');
+  grid.innerHTML=Array(count).fill(0).map(()=>
+    '<div class="img-cell loading"><span class="loading-text">生成中...</span></div>'
+  ).join('');
+  section.style.display='block';
+  section.scrollIntoView({behavior:'smooth'});
 
   // Prepare API request - normalize endpoint (strip trailing /images to avoid double-path)
   let apiEndpoint=document.getElementById('apiEndpoint').value.trim().replace(/\/+$/,'');
   apiEndpoint=apiEndpoint.replace(/\/images\/?$/,'');
   const modelEl=document.getElementById('selectedModel').textContent;
-  const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
 
   // Build request body
-  // Note: gpt-image-2 supports 1024x1024 as default size
   const body={
     model: modelEl || 'gpt-image-2',
     prompt: prompt,
@@ -574,35 +586,29 @@ async function handleGenerate(){
       body:JSON.stringify(body)
     });
 
-    loading.classList.remove('show');
-
     if(!resp.ok){
-      const errText=await resp.text();
-      showToast('⚠️ 生成失败: '+(errText.slice(0,80)||resp.statusText));
+      // Show error in placeholders
+      grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#EF4444;font-size:14px;">
+        ⚠️ 生成失败<br><span style="font-size:12px;color:#8B8B9D;margin-top:8px;display:block;">${(await resp.text()).slice(0,80)}</span>
+      </div>`;
       return;
     }
 
     const data=await resp.json();
-    const section=document.getElementById('resultSection');
-    const grid=document.getElementById('resultGrid');
 
     // Render generated images with resolution badge
-    let items=[];
     const reqSize=body.size || '1024x1024';
     if(data.data && data.data.length>0){
-      items=data.data.map((img,i)=>{
+      grid.innerHTML=data.data.map((img,i)=>{
         const src=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
-        return `<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;">
+        return `<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;animation:fadeIn 0.3s ease;">
           <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer('${src.replace(/'/g,"\\'")}','${reqSize}')">
           <span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:2;">${reqSize}</span>
         </div>`;
       });
     } else {
-      items=[`<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">🖼</div>`];
+      grid.innerHTML=[`<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">🖼</div>`];
     }
-    grid.innerHTML=items.join('');
-    section.style.display='block';
-    section.scrollIntoView({behavior:'smooth'});
 
     // Update stats
     document.getElementById('statGenerated').textContent=parseInt(document.getElementById('statGenerated').textContent)+count;
@@ -632,7 +638,9 @@ async function handleGenerate(){
     if(gGrid.children.length>12)gGrid.lastElementChild.remove();
 
   } catch(e){
-    loading.classList.remove('show');
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#EF4444;font-size:14px;">
+      ⚠️ 网络错误<br><span style="font-size:12px;color:#8B8B9D;margin-top:8px;display:block;">${e.message}</span>
+    </div>`;
     showToast('⚠️ 网络错误: '+e.message);
   }
 }
