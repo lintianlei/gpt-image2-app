@@ -414,7 +414,7 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .viewer-back{background:none;border:none;color:#fff;font-size:22px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:4px;}
 .viewer-back:active{opacity:0.6;}
 .viewer-body{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:pointer;}
-.viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;transition:transform 0.05s;}
+.viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;transition:transform 0.05s;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto;}
 </style>
 
 <input type="file" id="fileInput" accept="image/*" style="display:none;">
@@ -897,7 +897,7 @@ window.addEventListener('popstate',function(){
 
 function dataUrlToBlob(dataUrl){
   const parts=dataUrl.split(',');
-  const mime=parts[0].match(/:(.*?);/)[1];
+  const mime=parts[0].match(/:(.*?);/)[1]||'image/png';
   const bytes=atob(parts[1]);
   const arr=new Uint8Array(bytes.length);
   for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
@@ -909,33 +909,43 @@ function saveViewerImage(){
 
   const statEl=document.getElementById('statFavorites');
 
-  // Method 1: Native share (no permissions needed, works on Android)
-  if(navigator.share){
-    try {
+  // Method 1: Try download via blob URL (works in most WebViews)
+  // Convert data URL to blob manually (no fetch needed)
+  try {
+    const blob=dataUrlToBlob(currentViewerSrc);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='gpt-image2-'+Date.now()+'.png';
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up after a delay to ensure download starts
+    setTimeout(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },1000);
+
+    showToast('💾 开始下载');
+    statEl.textContent=parseInt(statEl.textContent)+1;
+    return;
+  } catch(e){/* fall through */}
+
+  // Method 2: navigator.share (system share menu, no permissions needed)
+  try {
+    if(navigator.share){
       const blob=dataUrlToBlob(currentViewerSrc);
       const file=new File([blob],'gpt-image2-'+Date.now()+'.png',{type:'image/png'});
-      navigator.share({files:[file],title:'GPT IMAGE2'}).catch(()=>{});
+      navigator.share({files:[file],title:'GPT IMAGE2'});
       showToast('💾 已打开分享菜单');
       statEl.textContent=parseInt(statEl.textContent)+1;
       return;
-    } catch(e){/* fall through */}
-  }
+    }
+  } catch(e){/* fall through */}
 
-  // Method 2: Open in new tab (user can long-press to save)
-  const w=window.open('about:blank','_blank');
-  if(w){
-    w.document.write('<img src="'+currentViewerSrc+'" style="max-width:100%;margin:auto;display:block;"><p style="text-align:center;font-family:sans-serif;color:#666;margin-top:16px;">长按图片选择「保存图片」</p>');
-    showToast('📋 在新页面中长按保存');
-  } else {
-    // Method 3: Last resort - download attempt
-    const a=document.createElement('a');
-    a.href=currentViewerSrc;
-    a.download='gpt-image2-'+Date.now()+'.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast('💾 图片已保存');
-  }
+  // Method 3: Fallback - tell user to long-press
+  showToast('长按图片选择「保存图片」');
   statEl.textContent=parseInt(statEl.textContent)+1;
 }
 
