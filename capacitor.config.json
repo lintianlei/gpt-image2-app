@@ -1,0 +1,15 @@
+{
+  "appId": "com.gptimage2.app",
+  "appName": "GPT IMAGE2",
+  "webDir": ".",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0A0A0F"
+    }
+  }
+}

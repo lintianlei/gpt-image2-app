@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0A0A0F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GPT IMAGE2</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:#0A0A0F;color:#fff;overflow:hidden;height:100vh;display:flex;flex-direction:column;user-select:none;}
+.status-bar{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;color:#fff;font-size:14px;font-weight:600;}
+.page{display:none;flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 16px;}
+.page.active{display:block;}
+.header{display:flex;align-items:center;justify-content:space-between;padding:8px 0 16px;}
+.header-title{font-size:24px;font-weight:700;color:#fff;}
+.header-btn{width:36px;height:36px;border-radius:18px;background:#16161F;display:flex;align-items:center;justify-content:center;color:#8B8B9D;font-size:16px;border:none;cursor:pointer;}
+.card{background:#12121A;border-radius:16px;padding:14px;margin-bottom:14px;border:1px solid rgba(255,255,255,0.08);}
+.card-title{color:#E0E0E8;font-size:14px;font-weight:600;margin-bottom:10px;}
+.section-label{color:#8B8B9D;font-size:12px;margin-bottom:8px;margin-top:12px;}
+.section-label:first-child{margin-top:0;}
+.chip-row{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{padding:6px 12px;border-radius:14px;font-size:11px;font-weight:500;border:none;cursor:pointer;transition:all 0.2s;}
+.chip.active{background:#7C3AED;color:#fff;}
+.chip:not(.active){background:#1E1E2A;color:#8B8B9D;}
+.chip:active{transform:scale(0.95);}
+.prompt-input{width:100%;min-height:80px;background:#0A0A0F;border:none;border-radius:10px;padding:10px;color:#E0E0E8;font-size:14px;font-family:inherit;resize:none;outline:none;}
+.prompt-input::placeholder{color:#4A4A5A;}
+.inspire-link{display:flex;align-items:center;gap:6px;margin-top:10px;color:#7C3AED;font-size:12px;font-weight:500;cursor:pointer;}
+.btn-generate{width:100%;height:50px;background:#7C3AED;border:none;border-radius:25px;color:#fff;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;margin:16px 0;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,0.4);transition:all 0.2s;}
+.btn-generate:active{transform:scale(0.97);}
+.btn-secondary{flex:1;height:40px;background:#1E1E2A;border:1px solid rgba(255,255,255,0.06);border-radius:12px;color:#8B8B9D;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;}
+.btn-row{display:flex;gap:8px;margin-bottom:16px;}
+.img-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.img-cell{height:140px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:32px;color:rgba(255,255,255,0.3);position:relative;}
+.img-cell img{width:100%;height:100%;object-fit:cover;border-radius:12px;}
+.gallery-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.gallery-item{height:160px;border-radius:12px;padding:8px;display:flex;align-items:flex-end;color:rgba(255,255,255,0.5);font-size:11px;font-weight:500;position:relative;}
+.prompt-card{margin-bottom:12px;}
+.prompt-title{color:#E0E0E8;font-size:14px;font-weight:600;margin-bottom:6px;}
+.prompt-desc{color:#8B8B9D;font-size:12px;line-height:1.4;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.prompt-footer{display:flex;justify-content:space-between;align-items:center;}
+.prompt-tag{padding:4px 10px;background:#1E1E2A;border-radius:12px;font-size:10px;color:#7C3AED;}
+.btn-use{padding:6px 14px;background:#7C3AED;border:none;border-radius:14px;font-size:11px;color:#fff;font-weight:600;cursor:pointer;}
+.form-label{color:#8B8B9D;font-size:12px;margin-bottom:8px;}
+.form-input{background:#0A0A0F;border-radius:10px;padding:12px;color:#8B8B9D;font-size:13px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.status-dot{width:8px;height:8px;border-radius:4px;background:#22C55E;display:inline-block;margin-right:6px;}
+.model-dropdown{display:flex;flex-direction:column;overflow:hidden;border-radius:10px;margin-bottom:14px;}
+.model-option{display:flex;justify-content:space-between;align-items:center;padding:12px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);}
+.model-option:first-child{border-radius:10px 10px 0 0;background:rgba(124,58,237,0.1);color:#fff;font-weight:600;}
+.model-option:last-child{border-radius:0 0 10px 10px;}
+.model-option:not(:first-child){background:#0A0A0F;color:#8B8B9D;}
+.profile-header{display:flex;flex-direction:column;align-items:center;padding:20px 0;}
+.avatar{width:72px;height:72px;background:#7C3AED;border-radius:36px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;margin-bottom:12px;box-shadow:0 4px 12px rgba(124,58,237,0.4);}
+.username{font-size:18px;font-weight:600;color:#fff;}
+.bio{font-size:13px;color:#8B8B9D;margin-top:4px;}
+.stats-row{display:flex;justify-content:space-around;padding:16px;margin-bottom:16px;}
+.stat-item{text-align:center;}
+.stat-num{font-size:20px;font-weight:700;color:#fff;}
+.stat-label{font-size:11px;color:#8B8B9D;margin-top:2px;}
+.settings-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.04);}
+.settings-item:last-child{border-bottom:none;}
+.settings-label{font-size:14px;color:#E0E0E8;}
+.settings-value{font-size:14px;color:#8B8B9D;}
+.toggle-switch{width:44px;height:24px;background:#7C3AED;border-radius:12px;padding:2px;display:flex;justify-content:flex-end;cursor:pointer;}
+.toggle-dot{width:20px;height:20px;background:#fff;border-radius:10px;}
+.version-tag{text-align:center;padding:16px;color:#4A4A5A;font-size:12px;}
+
+/* Tab Bar */
+.tab-bar{position:fixed;bottom:0;left:0;right:0;padding:8px 21px 21px;z-index:100;display:flex;justify-content:center;pointer-events:none;}
+.tab-pill{width:100%;max-width:358px;height:62px;background:rgba(22,22,31,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:36px;border:1px solid rgba(255,255,255,0.08);display:flex;padding:4px;pointer-events:auto;}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:26px;font-size:10px;font-weight:500;border:none;cursor:pointer;transition:all 0.2s;background:transparent;color:#6B6B7B;}
+.tab-item.active{background:#7C3AED;color:#fff;}
+.tab-item svg{width:18px;height:18px;}
+
+/* Toast */
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#7C3AED;color:#fff;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+.toast.show{opacity:1;}
+
+/* Loading */
+.loading-overlay{position:fixed;inset:0;background:rgba(10,10,15,0.9);display:flex;align-items:center;justify-content:center;z-index:300;opacity:0;pointer-events:none;transition:opacity 0.3s;}
+.loading-overlay.show{opacity:1;pointer-events:all;}
+.spinner{width:40px;height:40px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<div class="status-bar">
+  <span id="timeDisplay">9:41</span>
+  <span style="letter-spacing:2px;">●●● ●</span>
+</div>
+
+<!-- Page: Home -->
+<div class="page active" id="page-home">
+  <div class="header">
+    <div class="header-title">GPT IMAGE2</div>
+    <button class="header-btn" onclick="switchTab('api')">⚙</button>
+  </div>
+  
+  <div class="card">
+    <div class="section-label">描述你想要的画面</div>
+    <textarea class="prompt-input" id="promptInput" placeholder="未来城市日落，超写实渲染，8k分辨率..."></textarea>
+    <div class="inspire-link" onclick="window.open('https://opennana.com/awesome-prompt-gallery?model=ChatGPT','_blank')">
+      ✨ 提示词灵感广场 →
+    </div>
+  </div>
+  
+  <div class="card">
+    <div class="card-title">图像设置</div>
+    
+    <div class="section-label">尺寸</div>
+    <div class="chip-row" id="sizeChips">
+      <button class="chip active" data-value="auto">自动</button>
+      <button class="chip" data-value="1k">1K</button>
+      <button class="chip" data-value="2k">2K</button>
+      <button class="chip" data-value="4k">4K</button>
+    </div>
+    
+    <div class="section-label">质量</div>
+    <div class="chip-row" id="qualityChips">
+      <button class="chip active" data-value="auto">自动</button>
+      <button class="chip" data-value="low">低</button>
+      <button class="chip" data-value="medium">中</button>
+      <button class="chip" data-value="high">高</button>
+    </div>
+    
+    <div class="section-label">格式</div>
+    <div class="chip-row" id="formatChips">
+      <button class="chip active" data-value="png">PNG</button>
+      <button class="chip" data-value="jpg">JPG</button>
+    </div>
+    
+    <div class="section-label">画面比例</div>
+    <div class="chip-row" id="ratioChips">
+      <button class="chip active" data-value="1:1">1:1</button>
+      <button class="chip" data-value="3:4">3:4</button>
+      <button class="chip" data-value="4:3">4:3</button>
+      <button class="chip" data-value="9:16">9:16</button>
+      <button class="chip" data-value="16:9">16:9</button>
+      <button class="chip" data-value="2:3">2:3</button>
+      <button class="chip" data-value="3:2">3:2</button>
+      <button class="chip" data-value="21:9">21:9</button>
+      <button class="chip" data-value="9:21">9:21</button>
+      <button class="chip" data-value="1:2">1:2</button>
+      <button class="chip" data-value="2:1">2:1</button>
+      <button class="chip" data-value="4:5">4:5</button>
+      <button class="chip" data-value="5:4">5:4</button>
+      <button class="chip" data-value="1:3">1:3</button>
+      <button class="chip" data-value="3:1">3:1</button>
+    </div>
+    
+    <div class="section-label">生成数量</div>
+    <div class="chip-row" id="countChips">
+      <button class="chip active" data-value="1">1</button>
+      <button class="chip" data-value="2">2</button>
+      <button class="chip" data-value="3">3</button>
+      <button class="chip" data-value="4">4</button>
+    </div>
+  </div>
+  
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="handleUpload()">⬆ 上传图片</button>
+    <button class="btn-secondary" onclick="switchTab('api')">⚙ 自定义 API</button>
+  </div>
+  
+  <button class="btn-generate" onclick="handleGenerate()">
+    <svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 1L11 6L16 8L11 10L9 15L7 10L2 8L7 6L9 1Z" fill="#fff"/></svg>
+    开始生成
+  </button>
+  
+  <div class="card" id="resultSection" style="display:none;">
+    <div class="card-title">生成结果</div>
+    <div class="img-grid" id="resultGrid"></div>
+    <div class="btn-row" style="margin-top:12px;margin-bottom:0;">
+      <button class="btn-secondary" onclick="handleSaveAll()">💾 保存全部</button>
+    </div>
+  </div>
+</div>
+
+<!-- Page: Gallery -->
+<div class="page" id="page-gallery">
+  <div class="header">
+    <div class="header-title">作品库</div>
+    <button class="header-btn">🔍</button>
+  </div>
+  <div class="gallery-grid" id="galleryGrid">
+    <div class="gallery-item" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">6月20日</div>
+    <div class="gallery-item" style="background:linear-gradient(135deg,#3B82F6,#8B5CF6);">6月20日</div>
+    <div class="gallery-item" style="background:linear-gradient(135deg,#F97316,#EC4899);">6月19日</div>
+    <div class="gallery-item" style="background:linear-gradient(135deg,#22C55E,#84CC16);">6月18日</div>
+  </div>
+</div>
+
+<!-- Page: Prompts -->
+<div class="page" id="page-prompts">
+  <div class="header">
+    <div class="header-title">提示词收藏</div>
+    <button class="header-btn" style="background:#7C3AED;color:#fff;">+</button>
+  </div>
+  
+  <div class="chip-row" style="margin-bottom:16px;" id="promptCategory">
+    <button class="chip active" data-cat="all">全部</button>
+    <button class="chip" data-cat="scifi">科幻</button>
+    <button class="chip" data-cat="landscape">风景</button>
+    <button class="chip" data-cat="portrait">人物</button>
+    <button class="chip" data-cat="abstract">抽象</button>
+  </div>
+  
+  <div class="prompt-card card" data-cat="scifi">
+    <div class="prompt-title">未来城市日落，赛博朋克风</div>
+    <div class="prompt-desc">A futuristic cyberpunk cityscape at golden hour, neon lights reflecting on wet streets, volumetric lighting, ultra detailed, 8k render...</div>
+    <div class="prompt-footer">
+      <span class="prompt-tag">科幻</span>
+      <button class="btn-use" onclick="usePrompt(this)">使用</button>
+    </div>
+  </div>
+  <div class="prompt-card card" data-cat="landscape">
+    <div class="prompt-title">极简山水，水墨写意风</div>
+    <div class="prompt-desc">Traditional Chinese ink wash painting, misty mountains and a lone pine tree, minimalist composition, zen aesthetic, rice paper texture...</div>
+    <div class="prompt-footer">
+      <span class="prompt-tag" style="color:#EC4899;">风景</span>
+      <button class="btn-use" onclick="usePrompt(this)">使用</button>
+    </div>
+  </div>
+  <div class="prompt-card card" data-cat="abstract">
+    <div class="prompt-title">梦幻森林，童话光影</div>
+    <div class="prompt-desc">Enchanted forest with glowing mushrooms and fairy lights, soft bokeh, warm golden hour rays through trees, magical atmosphere...</div>
+    <div class="prompt-footer">
+      <span class="prompt-tag" style="color:#6366F1;">抽象</span>
+      <button class="btn-use" onclick="usePrompt(this)">使用</button>
+    </div>
+  </div>
+</div>
+
+<!-- Page: API -->
+<div class="page" id="page-api">
+  <div class="header">
+    <div class="header-title">API 设置</div>
+    <button class="header-btn" style="color:#7C3AED;font-size:14px;font-weight:600;width:auto;padding:0 12px;border-radius:14px;" onclick="saveApiConfig()">保存</button>
+  </div>
+  
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+    <span class="status-dot"></span>
+    <span style="color:#8B8B9D;font-size:12px;">已连接 · <span id="selectedModel">gpt-image-2</span></span>
+  </div>
+  
+  <div class="card">
+    <div class="form-label">API 端点</div>
+    <div class="form-input">
+      <input type="text" id="apiEndpoint" value="https://api.openai.com/v1/images" style="background:transparent;border:none;color:#E0E0E8;font-size:13px;width:100%;outline:none;font-family:inherit;">
+    </div>
+    
+    <div class="form-label">API Key</div>
+    <div class="form-input">
+      <input type="password" id="apiKey" value="sk-your-api-key-here" style="background:transparent;border:none;color:#8B8B9D;font-size:13px;width:100%;outline:none;font-family:inherit;">
+      <button style="background:none;border:none;color:#8B8B9D;cursor:pointer;font-size:14px;" onclick="toggleApiKey()">👁</button>
+    </div>
+    
+    <div class="form-label">模型选择</div>
+    <div class="model-dropdown" id="modelDropdown">
+      <div class="model-option" data-model="gpt-image-2" onclick="selectModel(this)">gpt-image-2 <span style="font-size:10px;">✓</span></div>
+      <div class="model-option" data-model="gpt-image-2-vip" onclick="selectModel(this)">gpt-image-2-vip</div>
+      <div class="model-option" data-model="gpt-image-2-all" onclick="selectModel(this)">gpt-image-2-all</div>
+    </div>
+    
+    <button class="btn-secondary" style="width:100%;color:#7C3AED;border-color:rgba(124,58,237,0.3);font-weight:500;" onclick="testConnection()">✓ 测试连接</button>
+  </div>
+</div>
+
+<!-- Page: Profile -->
+<div class="page" id="page-profile">
+  <div class="profile-header">
+    <div class="avatar">G</div>
+    <div class="username">GPT Creator</div>
+    <div class="bio">AI 图像创作爱好者</div>
+  </div>
+  
+  <div class="card">
+    <div class="stats-row">
+      <div class="stat-item"><div class="stat-num">128</div><div class="stat-label">已生成</div></div>
+      <div class="stat-item"><div class="stat-num">36</div><div class="stat-label">已收藏</div></div>
+      <div class="stat-item"><div class="stat-num">892</div><div class="stat-label">API调用</div></div>
+    </div>
+  </div>
+  
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div class="settings-item"><span class="settings-label">主题设置</span><span class="settings-value">深色模式</span></div>
+    <div class="settings-item"><span class="settings-label">语言</span><span class="settings-value">简体中文</span></div>
+    <div class="settings-item"><span class="settings-label">推送通知</span><div class="toggle-switch" onclick="this.style.justifyContent=this.style.justifyContent==='flex-start'?'flex-end':'flex-start'"><div class="toggle-dot"></div></div></div>
+    <div class="settings-item"><span class="settings-label">关于</span><span class="settings-value">v1.0.0</span></div>
+  </div>
+  
+  <div class="version-tag">GPT IMAGE2 v1.0.0</div>
+</div>
+
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <div class="tab-pill">
+    <button class="tab-item active" onclick="switchTab('home')">
+      <svg viewBox="0 0 18 18" fill="none"><path d="M2 7L9 2L16 7V15H11V10H7V15H2V7Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span>首页</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('gallery')">
+      <svg viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="10" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="10" y="10" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>作品</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('prompts')">
+      <svg viewBox="0 0 18 18" fill="none"><path d="M9 2L11.5 6.5L16 7.5L12.5 10.8L13.5 15.5L9 13L4.5 15.5L5.5 10.8L2 7.5L6.5 6.5L9 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span>提示词</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('api')">
+      <svg viewBox="0 0 18 18" fill="none"><path d="M2 4H4L6 2L8 4L10 2L12 4H14V14H2V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="9" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>API</span>
+    </button>
+    <button class="tab-item" onclick="switchTab('profile')">
+      <svg viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 15C3 12 5.5 10 9 10C12.5 10 15 12 15 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>我的</span>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+</div>
+
+<script>
+function switchTab(tab){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  document.querySelectorAll('.tab-item').forEach((t,i)=>{
+    const tabs=['home','gallery','prompts','api','profile'];
+    t.classList.toggle('active',tabs[i]===tab);
+  });
+  document.querySelectorAll('.page').forEach(p=>p.scrollTop=0);
+}
+
+function selectChip(e,groupId){
+  e.target.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  e.target.classList.add('active');
+}
+
+document.querySelectorAll('.chip-row').forEach(row=>{
+  row.addEventListener('click',e=>{
+    if(e.target.classList.contains('chip')){
+      row.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+      e.target.classList.add('active');
+    }
+  });
+});
+
+document.getElementById('promptCategory').addEventListener('click',e=>{
+  if(e.target.classList.contains('chip')){
+    document.getElementById('promptCategory').querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    e.target.classList.add('active');
+    const cat=e.target.dataset.cat;
+    document.querySelectorAll('#page-prompts .prompt-card').forEach(card=>{
+      card.style.display=(cat==='all'||card.dataset.cat===cat)?'':'none';
+    });
+  }
+});
+
+function selectModel(el){
+  const model=el.dataset.model;
+  document.querySelectorAll('.model-option').forEach(o=>o.style.background='');
+  document.querySelectorAll('.model-option').forEach(o=>o.style.color='#8B8B9D');
+  document.querySelectorAll('.model-option').forEach(o=>o.style.fontWeight='400');
+  el.style.background='rgba(124,58,237,0.1)';
+  el.style.color='#fff';
+  el.style.fontWeight='600';
+  document.getElementById('selectedModel').textContent=model;
+  showToast('已选择: '+model);
+}
+
+function usePrompt(btn){
+  const card=btn.closest('.prompt-card');
+  const title=card.querySelector('.prompt-title').textContent;
+  switchTab('home');
+  setTimeout(()=>{document.getElementById('promptInput').value=title;},100);
+  showToast('已填入提示词');
+}
+
+function handleGenerate(){
+  const prompt=document.getElementById('promptInput').value.trim();
+  if(!prompt){showToast('请先输入提示词');return;}
+  
+  const loading=document.getElementById('loading');
+  loading.classList.add('show');
+  
+  setTimeout(()=>{
+    loading.classList.remove('show');
+    const section=document.getElementById('resultSection');
+    section.style.display='block';
+    const grid=document.getElementById('resultGrid');
+    const colors=[['#7C3AED','#EC4899'],['#3B82F6','#8B5CF6'],['#06B6D4','#3B82F6'],['#F97316','#EC4899']];
+    grid.innerHTML=colors.map(c=>`<div class="img-cell" style="background:linear-gradient(135deg,${c[0]},${c[1]});">🖼</div>`).join('');
+    section.scrollIntoView({behavior:'smooth'});
+    showToast('生成完成!');
+    
+    // Add to gallery
+    const gGrid=document.getElementById('galleryGrid');
+    const now=new Date();
+    const dateStr=(now.getMonth()+1)+'月'+now.getDate()+'日';
+    gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="background:linear-gradient(135deg,${colors[0][0]},${colors[0][1]});">${dateStr}</div>`);
+    if(gGrid.children.length>8)gGrid.lastElementChild.remove();
+  },2000);
+}
+
+function handleUpload(){
+  showToast('图片上传功能已就绪');
+}
+
+function handleSaveAll(){
+  showToast('图片已保存到作品库');
+  switchTab('gallery');
+}
+
+function toggleApiKey(){
+  const input=document.getElementById('apiKey');
+  input.type=input.type==='password'?'text':'password';
+}
+
+function saveApiConfig(){
+  showToast('API 配置已保存');
+}
+
+function testConnection(){
+  showToast('连接测试通过 ✓');
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2000);
+}
+
+// Time display
+const now=new Date();
+document.getElementById('timeDisplay').textContent=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+</script>
+
+</body>
+</html>
