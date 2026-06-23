@@ -513,18 +513,23 @@ async function handleGenerate(){
   apiEndpoint=apiEndpoint.replace(/\/images\/?$/,'');
   const modelEl=document.getElementById('selectedModel').textContent;
   const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
-  const ratioMap={'1:1':'1024x1024','3:4':'768x1024','4:3':'1024x768','9:16':'576x1024','16:9':'1024x576','2:3':'682x1024','3:2':'1024x682','21:9':'1024x438','9:21':'438x1024','1:2':'512x1024','2:1':'1024x512','4:5':'819x1024','5:4':'1024x819','1:3':'341x1024','3:1':'1024x341'};
-  const ratioEl=document.querySelector('#ratioChips .chip.active');
-  const sizeStr=ratioMap[ratioEl?.dataset.value] || '1024x1024';
 
   // Build request body
+  // Note: gpt-image-2 supports 1024x1024 as default size
   const body={
     model: modelEl || 'gpt-image-2',
     prompt: prompt,
     n: count,
-    size: sizeStr,
     response_format: 'b64_json'
   };
+
+  // Only add size if not "auto" and use standard OpenAI-compatible sizes
+  const ratioEl=document.querySelector('#ratioChips .chip.active');
+  if(ratioEl && ratioEl.dataset.value !== 'auto'){
+    const validSizes={'1:1':'1024x1024','3:4':'1024x1792','4:3':'1792x1024','9:16':'1024x1792','16:9':'1792x1024'};
+    const size=validSizes[ratioEl.dataset.value];
+    if(size) body.size = size;
+  }
 
   // Attach reference image as base64 if present
   if(referenceImageDataUrl){
@@ -750,8 +755,7 @@ async function testConnection(){
       body:JSON.stringify({
         model: document.getElementById('selectedModel').textContent,
         prompt:'test connection ping',
-        n:1,
-        size:'256x256'
+        n:1
       })
     });
 
