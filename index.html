@@ -528,28 +528,6 @@ function usePrompt(btn){
   showToast('已填入提示词');
 }
 
-async function handleGenerate(){
-  const prompt=document.getElementById('promptInput').value.trim();
-  if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
-
-  const apiKey=document.getElementById('apiKey').value.trim();
-  if(!apiKey || apiKey==='sk-your-api-key-here'){
-    showToast('⚠️ 请先在 API 设置中填写 API Key');
-    switchTab('api');
-    return;
-  }
-
-  const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
-
-  // Show result section with loading placeholders immediately
-  const section=document.getElementById('resultSection');
-  const grid=document.getElementById('resultGrid');
-  grid.innerHTML=Array(count).fill(0).map(()=>
-    '<div class="img-cell loading"><span class="loading-text">生成中...</span></div>'
-  ).join('');
-  section.style.display='block';
-  section.scrollIntoView({behavior:'smooth'});
-
 // --- Image Size Calculator ---
 const SIZE_MULTIPLE=16;
 const MAX_4K_EDGE=3840;
@@ -598,7 +576,6 @@ function calculateImageSize(tier, ratio){
   const h=rw>rh?roundToMultiple(longSide*rh/rw,SIZE_MULTIPLE):longSide;
   return normalizeImageSize(w,h);
 }
-
 async function handleGenerate(){
   const prompt=document.getElementById('promptInput').value.trim();
   if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
