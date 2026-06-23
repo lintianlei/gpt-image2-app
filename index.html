@@ -27,8 +27,8 @@ body.light-mode .settings-label{color:#1A1A2E;}
 body.light-mode .settings-value{color:#8B8B9D;}
 body.light-mode .stat-num{color:#1A1A2E;}
 body.light-mode .bio{color:#8B8B9D;}
-body.light-mode .model-option:not(:first-child){background:#F0F0F5;color:#6B6B7B;}
-body.light-mode .model-option:first-child{background:rgba(124,58,237,0.08);}
+body.light-mode .model-option{background:#F0F0F5;color:#6B6B7B;}
+body.light-mode .model-option.selected,body.light-mode .model-option:first-child.selected{background:rgba(124,58,237,0.08);color:#1A1A2E;font-weight:600;}
 body.light-mode .form-input{background:#F0F0F5;}
 body.light-mode .form-input input{color:#1A1A2E;}
 body.light-mode .tab-pill{background:rgba(255,255,255,0.95);border-color:rgba(0,0,0,0.08);}
@@ -77,12 +77,13 @@ body.light-mode .toggle-switch{background:#7C3AED;}
 .btn-use{padding:6px 14px;background:#7C3AED;border:none;border-radius:14px;font-size:11px;color:#fff;font-weight:600;cursor:pointer;}
 .form-label{color:#8B8B9D;font-size:12px;margin-bottom:8px;}
 .form-input{background:#0A0A0F;border-radius:10px;padding:12px;color:#8B8B9D;font-size:13px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
-.status-dot{width:8px;height:8px;border-radius:4px;background:#22C55E;display:inline-block;margin-right:6px;}
+.status-dot{width:8px;height:8px;border-radius:4px;background:#6B6B7B;display:inline-block;margin-right:6px;transition:background 0.3s;}
 .model-dropdown{display:flex;flex-direction:column;overflow:hidden;border-radius:10px;margin-bottom:14px;}
 .model-option{display:flex;justify-content:space-between;align-items:center;padding:12px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);}
 .model-option:first-child{border-radius:10px 10px 0 0;background:rgba(124,58,237,0.1);color:#fff;font-weight:600;}
 .model-option:last-child{border-radius:0 0 10px 10px;}
 .model-option:not(:first-child){background:#0A0A0F;color:#8B8B9D;}
+.model-check{font-size:11px;margin-left:4px;}
 .profile-header{display:flex;flex-direction:column;align-items:center;padding:20px 0;}
 .avatar{width:72px;height:72px;background:#7C3AED;border-radius:36px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;margin-bottom:12px;box-shadow:0 4px 12px rgba(124,58,237,0.4);}
 .username{font-size:18px;font-weight:600;color:#fff;}
@@ -302,9 +303,9 @@ body.light-mode .toggle-switch{background:#7C3AED;}
     
     <div class="form-label">模型选择</div>
     <div class="model-dropdown" id="modelDropdown">
-      <div class="model-option" data-model="gpt-image-2" onclick="selectModel(this)">gpt-image-2 <span style="font-size:10px;">✓</span></div>
-      <div class="model-option" data-model="gpt-image-2-vip" onclick="selectModel(this)">gpt-image-2-vip</div>
-      <div class="model-option" data-model="gpt-image-2-all" onclick="selectModel(this)">gpt-image-2-all</div>
+      <div class="model-option selected" data-model="gpt-image-2" onclick="selectModel(this)">gpt-image-2 <span class="model-check">✓</span></div>
+      <div class="model-option" data-model="gpt-image-2-vip" onclick="selectModel(this)">gpt-image-2-vip <span class="model-check"></span></div>
+      <div class="model-option" data-model="gpt-image-2-all" onclick="selectModel(this)">gpt-image-2-all <span class="model-check"></span></div>
     </div>
     
     <button class="btn-secondary" style="width:100%;color:#7C3AED;border-color:rgba(124,58,237,0.3);font-weight:500;" onclick="testConnection()">✓ 测试连接</button>
@@ -457,15 +458,33 @@ document.getElementById('promptCategory').addEventListener('click',e=>{
 
 function selectModel(el){
   const model=el.dataset.model;
-  document.querySelectorAll('.model-option').forEach(o=>o.style.background='');
-  document.querySelectorAll('.model-option').forEach(o=>o.style.color='#8B8B9D');
-  document.querySelectorAll('.model-option').forEach(o=>o.style.fontWeight='400');
+  // Move .selected class and checkmark
+  document.querySelectorAll('.model-option').forEach(o=>{
+    o.classList.remove('selected');
+    o.style.background='';
+    o.style.color='#8B8B9D';
+    o.style.fontWeight='400';
+    o.querySelector('.model-check').textContent='';
+  });
+  el.classList.add('selected');
   el.style.background='rgba(124,58,237,0.1)';
   el.style.color='#fff';
   el.style.fontWeight='600';
+  el.querySelector('.model-check').textContent='✓';
   document.getElementById('selectedModel').textContent=model;
+  // Save to localStorage
+  localStorage.setItem('gpt-image2-model', model);
   showToast('已选择: '+model);
 }
+
+// Load saved model on startup
+(function(){
+  const savedModel=localStorage.getItem('gpt-image2-model');
+  if(savedModel){
+    const opt=document.querySelector(`.model-option[data-model="${savedModel}"]`);
+    if(opt) selectModel(opt);
+  }
+})();
 
 function usePrompt(btn){
   const card=btn.closest('.prompt-card');
@@ -475,76 +494,104 @@ function usePrompt(btn){
   showToast('已填入提示词');
 }
 
-function handleGenerate(){
+async function handleGenerate(){
   const prompt=document.getElementById('promptInput').value.trim();
   if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
+
+  const apiKey=document.getElementById('apiKey').value.trim();
+  if(!apiKey || apiKey==='sk-your-api-key-here'){
+    showToast('⚠️ 请先在 API 设置中填写 API Key');
+    switchTab('api');
+    return;
+  }
 
   const loading=document.getElementById('loading');
   loading.classList.add('show');
 
-  // Prepare API request payload
-  const apiEndpoint=document.getElementById('apiEndpoint').value.trim();
-  const apiKey=document.getElementById('apiKey').value.trim();
+  // Prepare API request
+  const apiEndpoint=document.getElementById('apiEndpoint').value.trim().replace(/\/+$/,'');
   const modelEl=document.getElementById('selectedModel').textContent;
-  const sizeEl=document.querySelector('#sizeChips .chip.active');
+  const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
+  const ratioMap={'1:1':'1024x1024','3:4':'768x1024','4:3':'1024x768','9:16':'576x1024','16:9':'1024x576','2:3':'682x1024','3:2':'1024x682','21:9':'1024x438','9:21':'438x1024','1:2':'512x1024','2:1':'1024x512','4:5':'819x1024','5:4':'1024x819','1:3':'341x1024','3:1':'1024x341'};
   const ratioEl=document.querySelector('#ratioChips .chip.active');
-  const qualityEl=document.querySelector('#qualityChips .chip.active');
+  const sizeStr=ratioMap[ratioEl?.dataset.value] || '1024x1024';
 
-  const payload={
+  // Build request body
+  const body={
     model: modelEl || 'gpt-image-2',
-    prompt: prompt || '(with reference image)',
-    n: parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1'),
-    size: ratioEl?.dataset.value||'1:1',
-    quality: qualityEl?.dataset.value||'auto',
+    prompt: prompt,
+    n: count,
+    size: sizeStr,
+    response_format: 'b64_json'
   };
 
-  // Attach reference image if present
+  // Attach reference image as base64 if present
   if(referenceImageDataUrl){
-    payload.image=referenceImageDataUrl;
-    // For gpt-image-2 API: send as base64 in the image field
-    console.log('Sending reference image with prompt:', prompt);
+    body.image = referenceImageDataUrl;
   }
 
-  console.log('API Request:', JSON.stringify({endpoint:apiEndpoint, ...payload}).slice(0,200)+'...');
+  try {
+    const resp=await fetch(apiEndpoint+'/generations', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+apiKey
+      },
+      body:JSON.stringify(body)
+    });
 
-  // Simulate API call with loading
-  setTimeout(()=>{
     loading.classList.remove('show');
+
+    if(!resp.ok){
+      const errText=await resp.text();
+      showToast('⚠️ 生成失败: '+(errText.slice(0,80)||resp.statusText));
+      return;
+    }
+
+    const data=await resp.json();
     const section=document.getElementById('resultSection');
-    section.style.display='block';
     const grid=document.getElementById('resultGrid');
 
-    // Show generation result (mock)
-    const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
-    const items=[];
-    for(let i=0;i<count;i++){
-      if(referenceImageDataUrl && i===0){
-        // Show reference-based result marker
-        items.push(`<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#3B82F6);position:relative;"><span style="position:absolute;top:4px;left:4px;background:rgba(124,58,237,0.8);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:1;">参考图生成</span>🖼</div>`);
-      } else {
-        const colors=[['#7C3AED','#EC4899'],['#3B82F6','#8B5CF6'],['#06B6D4','#3B82F6'],['#F97316','#EC4899']];
-        const c=colors[i%colors.length];
-        items.push(`<div class="img-cell" style="background:linear-gradient(135deg,${c[0]},${c[1]});">🖼</div>`);
-      }
+    // Render generated images
+    let items=[];
+    if(data.data && data.data.length>0){
+      items=data.data.map((img,i)=>{
+        if(img.b64_json){
+          return `<div class="img-cell" style="padding:2px;background:transparent;"><img src="data:image/png;base64,${img.b64_json}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="window.open(this.src)"></div>`;
+        } else if(img.url){
+          return `<div class="img-cell" style="padding:2px;background:transparent;"><img src="${img.url}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="window.open(this.src)"></div>`;
+        }
+        return `<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">🖼</div>`;
+      });
+    } else {
+      items=[`<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">🖼</div>`];
     }
     grid.innerHTML=items.join('');
+    section.style.display='block';
     section.scrollIntoView({behavior:'smooth'});
 
     // Update stats
-    const statEl=document.getElementById('statGenerated');
-    statEl.textContent=parseInt(statEl.textContent)+count;
-    const apiStatEl=document.getElementById('statApiCalls');
-    apiStatEl.textContent=parseInt(apiStatEl.textContent)+1;
-
-    showToast('生成完成!');
+    document.getElementById('statGenerated').textContent=parseInt(document.getElementById('statGenerated').textContent)+count;
+    document.getElementById('statApiCalls').textContent=parseInt(document.getElementById('statApiCalls').textContent)+1;
+    showToast('✅ 生成完成!');
 
     // Add to gallery
     const gGrid=document.getElementById('galleryGrid');
     const now=new Date();
     const dateStr=(now.getMonth()+1)+'月'+now.getDate()+'日';
-    gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="background:linear-gradient(135deg,#7C3AED,#3B82F6);">${referenceImageDataUrl?'✨ ':''}${dateStr}</div>`);
-    if(gGrid.children.length>8)gGrid.lastElementChild.remove();
-  },2000);
+    // Use first result image for gallery
+    if(data.data && data.data[0]){
+      const thumb=data.data[0].b64_json ? `data:image/png;base64,${data.data[0].b64_json}` : data.data[0].url;
+      gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;"><img src="${thumb}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;"><span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span></div>`);
+    } else {
+      gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="background:linear-gradient(135deg,#7C3AED,#3B82F6);">${dateStr}</div>`);
+    }
+    if(gGrid.children.length>12)gGrid.lastElementChild.remove();
+
+  } catch(e){
+    loading.classList.remove('show');
+    showToast('⚠️ 网络错误: '+e.message);
+  }
 }
 
 function removeReference(){
@@ -675,12 +722,55 @@ function saveApiConfig(){
   showToast('API 配置已保存');
 }
 
-function testConnection(){
-  showToast('连接测试通过 ✓');
-  const statEl=document.getElementById('statApiCalls');
-  statEl.textContent=parseInt(statEl.textContent)+1;
-  // Save config
-  saveApiConfig();
+async function testConnection(){
+  const btn=document.querySelector('.btn-secondary[onclick*="testConnection"]');
+  const origText=btn.innerHTML;
+  btn.innerHTML='⏳ 测试中...';
+  btn.style.pointerEvents='none';
+
+  const endpoint=document.getElementById('apiEndpoint').value.trim();
+  const key=document.getElementById('apiKey').value.trim();
+
+  if(!key || key==='sk-your-api-key-here'){
+    showToast('⚠️ 请先填入有效的 API Key');
+    btn.innerHTML=origText;
+    btn.style.pointerEvents='auto';
+    return;
+  }
+
+  try {
+    const resp=await fetch(endpoint.replace(/\/+$/,'')+'/generations', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+key
+      },
+      body:JSON.stringify({
+        model: document.getElementById('selectedModel').textContent,
+        prompt:'test connection ping',
+        n:1,
+        size:'256x256'
+      })
+    });
+
+    if(resp.ok){
+      showToast('✅ 连接测试通过');
+      document.querySelector('.status-dot').style.background='#22C55E';
+      const statEl=document.getElementById('statApiCalls');
+      statEl.textContent=parseInt(statEl.textContent)+1;
+      saveApiConfig();
+    } else {
+      const err=await resp.text();
+      showToast('⚠️ 连接失败: '+ (err.slice(0,60) || resp.statusText));
+      document.querySelector('.status-dot').style.background='#EF4444';
+    }
+  } catch(e){
+    showToast('⚠️ 网络错误: '+e.message);
+    document.querySelector('.status-dot').style.background='#EF4444';
+  }
+
+  btn.innerHTML=origText;
+  btn.style.pointerEvents='auto';
 }
 
 function showToast(msg){
