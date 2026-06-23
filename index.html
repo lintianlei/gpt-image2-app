@@ -550,52 +550,141 @@ async function handleGenerate(){
   section.style.display='block';
   section.scrollIntoView({behavior:'smooth'});
 
-  // Prepare API request - normalize endpoint (strip trailing /images to avoid double-path)
+// --- Image Size Calculator ---
+const SIZE_MULTIPLE=16;
+const MAX_4K_EDGE=3840;
+const MAX_2K_EDGE=2560;
+const MAX_1K_EDGE=1024;
+
+function roundToMultiple(v,m){return Math.max(m,Math.round(v/m)*m);}
+function floorToMultiple(v,m){return Math.max(m,Math.floor(v/m)*m);}
+function ceilToMultiple(v,m){return Math.max(m,Math.ceil(v/m)*m);}
+
+function parseRatio(ratio){
+  const m=ratio.match(/^\s*(\d+(?:\.\d+)?)\s*[:xX×]\s*(\d+(?:\.\d+)?)\s*$/);
+  if(!m) return null;
+  const w=Number(m[1]),h=Number(m[2]);
+  return (Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0)?{width:w,height:h}:null;
+}
+
+function normalizeImageSize(w,h){
+  let nw=roundToMultiple(w,SIZE_MULTIPLE),nh=roundToMultiple(h,SIZE_MULTIPLE);
+  const maxEdge=Math.max(nw,nh),maxAllowed=3840;
+  if(maxEdge>maxAllowed){const s=maxAllowed/maxEdge;nw=floorToMultiple(nw*s,SIZE_MULTIPLE);nh=floorToMultiple(nh*s,SIZE_MULTIPLE);}
+  if(nw/nh>3){nw=floorToMultiple(nh*3,SIZE_MULTIPLE);}
+  else if(nh/nw>3){nh=floorToMultiple(nw*3,SIZE_MULTIPLE);}
+  const pixels=nw*nh,maxPixels=maxAllowed*maxAllowed,minPixels=655360;
+  if(pixels>maxPixels){const s=Math.sqrt(maxPixels/pixels);nw=floorToMultiple(nw*s,SIZE_MULTIPLE);nh=floorToMultiple(nh*s,SIZE_MULTIPLE);}
+  else if(pixels<minPixels){const s=Math.sqrt(minPixels/pixels);nw=ceilToMultiple(nw*s,SIZE_MULTIPLE);nh=ceilToMultiple(nh*s,SIZE_MULTIPLE);}
+  return nw+'x'+nh;
+}
+
+function calculateImageSize(tier, ratio){
+  const p=parseRatio(ratio);
+  if(!p) return '1024x1024';
+  const {width:rw,height:rh}=p;
+  if(rw===rh){
+    const side=tier==='4K'?MAX_4K_EDGE:tier==='2K'?MAX_2K_EDGE:MAX_1K_EDGE;
+    return normalizeImageSize(side,side);
+  }
+  if(tier==='1K'){
+    const short=MAX_1K_EDGE;
+    const w=rw>rh?roundToMultiple(short*rw/rh,SIZE_MULTIPLE):short;
+    const h=rw>rh?short:roundToMultiple(short*rh/rw,SIZE_MULTIPLE);
+    return normalizeImageSize(w,h);
+  }
+  const longSide=tier==='2K'?MAX_2K_EDGE:MAX_4K_EDGE;
+  const w=rw>rh?longSide:roundToMultiple(longSide*rw/rh,SIZE_MULTIPLE);
+  const h=rw>rh?roundToMultiple(longSide*rh/rw,SIZE_MULTIPLE):longSide;
+  return normalizeImageSize(w,h);
+}
+
+async function handleGenerate(){
+  const prompt=document.getElementById('promptInput').value.trim();
+  if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
+
+  const apiKey=document.getElementById('apiKey').value.trim();
+  if(!apiKey || apiKey==='sk-your-api-key-here'){
+    showToast('⚠️ 请先在 API 设置中填写 API Key');
+    switchTab('api');
+    return;
+  }
+
+  const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
+
+  // Show result section with loading placeholders immediately
+  const section=document.getElementById('resultSection');
+  const grid=document.getElementById('resultGrid');
+  grid.innerHTML=Array(count).fill(0).map(()=>
+    '<div class="img-cell loading"><span class="loading-text">生成中...</span></div>'
+  ).join('');
+  section.style.display='block';
+  section.scrollIntoView({behavior:'smooth'});
+
+  // Prepare API request
   let apiEndpoint=document.getElementById('apiEndpoint').value.trim().replace(/\/+$/,'');
   apiEndpoint=apiEndpoint.replace(/\/images\/?$/,'');
   const modelEl=document.getElementById('selectedModel').textContent;
 
-  // Build request body
-  const body={
-    model: modelEl || 'gpt-image-2',
-    prompt: prompt,
-    n: count,
-    response_format: 'b64_json'
-  };
-
-  // Size: always send valid DALL-E 3 compatible sizes (1024x1024 is universal)
+  // Calculate size from tier×ratio
   const ratioEl=document.querySelector('#ratioChips .chip.active');
-  const ratioVal=ratioEl?.dataset.value || 'auto';
-  if(ratioVal !== 'auto'){
-    // Map common aspect ratios to DALL-E 3 supported sizes
-    const ratioSizeMap={
-      '1:1':'1024x1024', '3:4':'1024x1792', '4:3':'1792x1024',
-      '9:16':'1024x1792', '16:9':'1792x1024', '2:3':'1024x1792',
-      '3:2':'1792x1024', '1:2':'1024x1792', '2:1':'1792x1024',
-      '4:5':'1024x1792', '5:4':'1792x1024', '1:3':'1024x1792',
-      '3:1':'1792x1024', '21:9':'1792x1024', '9:21':'1024x1792'
-    };
-    body.size = ratioSizeMap[ratioVal] || '1024x1024';
+  const ratioVal=ratioEl?.dataset.value||'auto';
+  const sizeEl=document.querySelector('#sizeChips .chip.active');
+  const sizeTier=sizeEl?.dataset.value||'auto';
+
+  let finalSize='1024x1024';
+  if(ratioVal!=='auto'&&sizeTier!=='auto'){
+    finalSize=calculateImageSize(sizeTier,ratioVal);
+  }else if(ratioVal!=='auto'){
+    finalSize=calculateImageSize('1K',ratioVal);
   }
 
-  // Attach reference image info into the prompt so the model uses it as context
-  if(referenceImageDataUrl){
-    body.image = referenceImageDataUrl.replace(/^data:image\/\w+;base64,/, '');
-    // Also reinforce in prompt for models that need text context
-    if(prompt && !prompt.toLowerCase().includes('reference') && !prompt.toLowerCase().includes('参考')){
-      body.prompt = prompt + ' (参考附图中的构图和风格进行创作)';
-    }
-  }
+  const hasReferenceImage=!!referenceImageDataUrl;
+  const isEdit=hasReferenceImage;
 
   try {
-    const resp=await fetch(apiEndpoint+'/images/generations', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':'Bearer '+apiKey
-      },
-      body:JSON.stringify(body)
-    });
+    let resp;
+
+    if(isEdit){
+      // Reference image: use FormData → /images/edits
+      const formData=new FormData();
+      formData.append('model',modelEl||'gpt-image-2');
+      formData.append('prompt',prompt||'基于参考图创作');
+      formData.append('size',finalSize);
+      formData.append('n',String(count));
+      formData.append('response_format','b64_json');
+
+      // Append the reference image as a file blob
+      const base64Data=referenceImageDataUrl.replace(/^data:image\/\w+;base64,/,'');
+      const byteChars=atob(base64Data);
+      const byteArr=new Uint8Array(byteChars.length);
+      for(let i=0;i<byteChars.length;i++) byteArr[i]=byteChars.charCodeAt(i);
+      const blob=new Blob([byteArr],{type:'image/png'});
+      formData.append('image',blob,'reference.png');
+
+      resp=await fetch(apiEndpoint+'/images/edits',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+apiKey},
+        body:formData
+      });
+    } else {
+      // No reference: standard JSON → /images/generations
+      const body={
+        model:modelEl||'gpt-image-2',
+        prompt:prompt,
+        n:count,
+        size:finalSize,
+        response_format:'b64_json'
+      };
+      resp=await fetch(apiEndpoint+'/images/generations',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+apiKey
+        },
+        body:JSON.stringify(body)
+      });
+    }
 
     if(!resp.ok){
       // Show error in placeholders
@@ -608,7 +697,7 @@ async function handleGenerate(){
     const data=await resp.json();
 
     // Render generated images with resolution badge
-    const reqSize=body.size || '1024x1024';
+    const reqSize=finalSize;
     if(data.data && data.data.length>0){
       grid.innerHTML=data.data.map((img,i)=>{
         const src=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
@@ -632,7 +721,7 @@ async function handleGenerate(){
     const dateStr=(now.getMonth()+1)+'月'+now.getDate()+'日';
     // Add ALL generated images to gallery
     if(data.data && data.data.length>0){
-      const allSizes=body.size || '1024x1024';
+      const allSizes=finalSize;
       data.data.forEach((img,i)=>{
         const thumbSrc=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
         // only add up to 4 images per generation batch to avoid clutter
