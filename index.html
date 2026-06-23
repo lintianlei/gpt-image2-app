@@ -895,24 +895,18 @@ window.addEventListener('popstate',function(){
   if(document.getElementById('viewerOverlay').classList.contains('show'))closeViewer();
 });
 
-function dataUrlToBlob(dataUrl){
-  const parts=dataUrl.split(',');
-  const mime=parts[0].match(/:(.*?);/)[1]||'image/png';
-  const bytes=atob(parts[1]);
-  const arr=new Uint8Array(bytes.length);
-  for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
-  return new Blob([arr],{type:mime});
-}
-
 function saveViewerImage(){
   if(!currentViewerSrc){showToast('没有可保存的图片');return;}
 
-  const statEl=document.getElementById('statFavorites');
-
-  // Method 1: Try download via blob URL (works in most WebViews)
-  // Convert data URL to blob manually (no fetch needed)
   try {
-    const blob=dataUrlToBlob(currentViewerSrc);
+    // Convert data URL to blob and trigger download
+    const parts=currentViewerSrc.split(',');
+    const mime=parts[0].match(/:(.*?);/)[1]||'image/png';
+    const bytes=atob(parts[1]);
+    const arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+    const blob=new Blob([arr],{type:mime});
+
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;
@@ -920,33 +914,12 @@ function saveViewerImage(){
     a.style.display='none';
     document.body.appendChild(a);
     a.click();
-
-    // Clean up after a delay to ensure download starts
-    setTimeout(()=>{
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    },1000);
-
-    showToast('💾 开始下载');
-    statEl.textContent=parseInt(statEl.textContent)+1;
-    return;
-  } catch(e){/* fall through */}
-
-  // Method 2: navigator.share (system share menu, no permissions needed)
-  try {
-    if(navigator.share){
-      const blob=dataUrlToBlob(currentViewerSrc);
-      const file=new File([blob],'gpt-image2-'+Date.now()+'.png',{type:'image/png'});
-      navigator.share({files:[file],title:'GPT IMAGE2'});
-      showToast('💾 已打开分享菜单');
-      statEl.textContent=parseInt(statEl.textContent)+1;
-      return;
-    }
-  } catch(e){/* fall through */}
-
-  // Method 3: Fallback - tell user to long-press
-  showToast('长按图片选择「保存图片」');
-  statEl.textContent=parseInt(statEl.textContent)+1;
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+    showToast('💾 图片已保存');
+    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+  } catch(e){
+    showToast('保存失败: '+e.message);
+  }
 }
 
 function toggleApiKey(){
