@@ -835,10 +835,33 @@ function editorConfirm(){
 }
 
 function handleSaveAll(){
-  showToast('图片已保存到作品库');
+  const images=document.querySelectorAll('#resultGrid img');
+  if(!images.length){showToast('没有可保存的图片');return;}
+
+  let saved=0;
+  images.forEach((img,i)=>{
+    setTimeout(()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth||1024;
+      c.height=img.naturalHeight||1024;
+      c.getContext('2d').drawImage(img,0,0);
+      c.toBlob(function(blob){
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download='gpt-image2-'+(i+1)+'-'+Date.now()+'.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        saved++;
+        if(saved===images.length)showToast('✅ 已保存 '+saved+' 张图片');
+      },'image/png');
+    },i*300);
+  });
+
   const statEl=document.getElementById('statFavorites');
-  statEl.textContent=parseInt(statEl.textContent)+1;
-  switchTab('gallery');
+  statEl.textContent=parseInt(statEl.textContent)+images.length;
 }
 
 // --- Full-screen Image Viewer ---
@@ -860,15 +883,38 @@ function closeViewer(e){
 
 function saveViewerImage(){
   if(!currentViewerSrc){showToast('没有可保存的图片');return;}
-  // Trigger download
-  const a=document.createElement('a');
-  a.href=currentViewerSrc;
-  a.download='gpt-image2-'+Date.now()+'.png';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  showToast('💾 图片已保存');
-  // Also increment favorites stat
+
+  // Use canvas to make download reliable (works with data: and blob: URLs)
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=function(){
+    const c=document.createElement('canvas');
+    c.width=img.width;c.height=img.height;
+    c.getContext('2d').drawImage(img,0,0);
+    c.toBlob(function(blob){
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download='gpt-image2-'+Date.now()+'.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('💾 图片已保存');
+    },'image/png');
+  };
+  img.onerror=function(){
+    // Fallback: direct download
+    const a=document.createElement('a');
+    a.href=currentViewerSrc;
+    a.download='gpt-image2-'+Date.now()+'.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('💾 图片已保存');
+  };
+  img.src=currentViewerSrc;
+
   const statEl=document.getElementById('statFavorites');
   statEl.textContent=parseInt(statEl.textContent)+1;
 }
