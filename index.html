@@ -563,17 +563,28 @@ async function handleGenerate(){
     response_format: 'b64_json'
   };
 
-  // Only add size if not "auto" and use standard OpenAI-compatible sizes
+  // Size: always send valid DALL-E 3 compatible sizes (1024x1024 is universal)
   const ratioEl=document.querySelector('#ratioChips .chip.active');
-  if(ratioEl && ratioEl.dataset.value !== 'auto'){
-    const validSizes={'1:1':'1024x1024','3:4':'1024x1792','4:3':'1792x1024','9:16':'1024x1792','16:9':'1792x1024'};
-    const size=validSizes[ratioEl.dataset.value];
-    if(size) body.size = size;
+  const ratioVal=ratioEl?.dataset.value || 'auto';
+  if(ratioVal !== 'auto'){
+    // Map common aspect ratios to DALL-E 3 supported sizes
+    const ratioSizeMap={
+      '1:1':'1024x1024', '3:4':'1024x1792', '4:3':'1792x1024',
+      '9:16':'1024x1792', '16:9':'1792x1024', '2:3':'1024x1792',
+      '3:2':'1792x1024', '1:2':'1024x1792', '2:1':'1792x1024',
+      '4:5':'1024x1792', '5:4':'1792x1024', '1:3':'1024x1792',
+      '3:1':'1792x1024', '21:9':'1792x1024', '9:21':'1024x1792'
+    };
+    body.size = ratioSizeMap[ratioVal] || '1024x1024';
   }
 
-  // Attach reference image as clean base64 (strip data: prefix)
+  // Attach reference image info into the prompt so the model uses it as context
   if(referenceImageDataUrl){
     body.image = referenceImageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+    // Also reinforce in prompt for models that need text context
+    if(prompt && !prompt.toLowerCase().includes('reference') && !prompt.toLowerCase().includes('参考')){
+      body.prompt = prompt + ' (参考附图中的构图和风格进行创作)';
+    }
   }
 
   try {
