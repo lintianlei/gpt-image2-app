@@ -409,50 +409,7 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .viewer-body img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;}
 </style>
 
-<!-- Image Upload & Editor -->
 <input type="file" id="fileInput" accept="image/*" style="display:none;">
-<div class="editor-overlay" id="editorOverlay">
-  <div class="editor-container">
-    <div class="editor-header">
-      <span style="font-size:16px;font-weight:600;">编辑图片</span>
-      <button class="editor-close" onclick="closeEditor()">✕</button>
-    </div>
-    <div class="editor-canvas-wrap">
-      <canvas id="editorCanvas"></canvas>
-    </div>
-    <div class="editor-tools">
-      <button class="editor-tool" onclick="editorRotate()">🔄 旋转</button>
-      <button class="editor-tool" onclick="editorFlip()">↔ 翻转</button>
-      <button class="editor-tool" onclick="editorReset()">↩ 重置</button>
-    </div>
-    <div class="editor-actions">
-      <button class="editor-btn cancel" onclick="closeEditor()">取消</button>
-      <button class="editor-btn confirm" onclick="editorConfirm()">✓ 确认使用</button>
-    </div>
-  </div>
-</div>
-
-<style>
-.editor-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;}
-.editor-overlay.show{display:flex;}
-.editor-container{background:#12121A;border-radius:20px;width:100%;max-width:400px;overflow:hidden;}
-body.light-mode .editor-container{background:#fff;}
-.editor-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);color:#E0E0E8;}
-body.light-mode .editor-header{color:#1A1A2E;border-color:rgba(0,0,0,0.08);}
-.editor-close{background:none;border:none;color:#8B8B9D;font-size:20px;cursor:pointer;padding:4px;}
-.editor-canvas-wrap{display:flex;align-items:center;justify-content:center;padding:16px;min-height:260px;background:#0A0A0F;}
-body.light-mode .editor-canvas-wrap{background:#F0F0F5;}
-#editorCanvas{max-width:100%;max-height:280px;border-radius:10px;}
-.editor-tools{display:flex;gap:6px;justify-content:center;padding:0 16px 12px;flex-wrap:wrap;}
-.editor-tool{padding:8px 16px;border-radius:20px;background:#1E1E2A;border:none;color:#8B8B9D;font-size:13px;cursor:pointer;}
-body.light-mode .editor-tool{background:#E8E8F0;color:#6B6B7B;}
-.editor-tool:active{transform:scale(0.95);}
-.editor-actions{display:flex;gap:8px;padding:12px 16px 16px;}
-.editor-btn{flex:1;height:44px;border-radius:22px;font-size:14px;font-weight:600;border:none;cursor:pointer;}
-.editor-btn.cancel{background:#1E1E2A;color:#8B8B9D;}
-body.light-mode .editor-btn.cancel{background:#E8E8F0;color:#6B6B7B;}
-.editor-btn.confirm{background:#7C3AED;color:#fff;}
-</style>
 
 <script>
 function switchTab(tab){
@@ -751,26 +708,23 @@ function toggleTheme(){
 })();
 
 // --- Image Upload & Editor (for reference image) ---
-let uploadedFile=null;
-let editorImage=null;
-let editorTransform={rotate:0,flipH:false};
-let referenceImageDataUrl=null; // stores the final reference image for generation
+let referenceImageDataUrl=null; // stores the reference image for generation
 
 document.getElementById('fileInput').addEventListener('change',function(e){
   const file=e.target.files[0];
   if(!file)return;
-  uploadedFile=file;
 
   const reader=new FileReader();
   reader.onload=function(ev){
-    const img=new Image();
-    img.onload=function(){
-      editorImage=img;
-      editorTransform={rotate:0,flipH:false};
-      document.getElementById('editorOverlay').classList.add('show');
-      renderEditor();
-    };
-    img.src=ev.target.result;
+    // Set reference image directly, no editing
+    referenceImageDataUrl=ev.target.result;
+
+    // Show reference preview
+    const preview=document.getElementById('refPreview');
+    const img=document.getElementById('refImage');
+    img.src=referenceImageDataUrl;
+    preview.style.display='block';
+    showToast('参考图已就绪，可输入提示词生成 AI 图像');
   };
   reader.readAsDataURL(file);
   this.value='';
@@ -778,60 +732,6 @@ document.getElementById('fileInput').addEventListener('change',function(e){
 
 function handleUpload(){
   document.getElementById('fileInput').click();
-}
-
-function renderEditor(){
-  const canvas=document.getElementById('editorCanvas');
-  const ctx=canvas.getContext('2d');
-  if(!editorImage)return;
-
-  let w=editorImage.width,h=editorImage.height;
-  const maxDim=360;
-  if(w>maxDim||h>maxDim){const s=Math.min(maxDim/w,maxDim/h);w*=s;h*=s;}
-
-  canvas.width=w;canvas.height=h;
-  ctx.clearRect(0,0,w,h);
-  ctx.save();
-  ctx.translate(w/2,h/2);
-  ctx.rotate(editorTransform.rotate*Math.PI/180);
-  if(editorTransform.flipH)ctx.scale(-1,1);
-  ctx.drawImage(editorImage,-w/2,-h/2,w,h);
-  ctx.restore();
-}
-
-function editorRotate(){
-  editorTransform.rotate=(editorTransform.rotate+90)%360;
-  renderEditor();
-}
-
-function editorFlip(){
-  editorTransform.flipH=!editorTransform.flipH;
-  renderEditor();
-}
-
-function editorReset(){
-  editorTransform={rotate:0,flipH:false};
-  renderEditor();
-}
-
-function closeEditor(){
-  document.getElementById('editorOverlay').classList.remove('show');
-  editorImage=null;
-}
-
-function editorConfirm(){
-  const canvas=document.getElementById('editorCanvas');
-  // Convert canvas to reference image data URL
-  referenceImageDataUrl=canvas.toDataURL('image/png');
-
-  // Show reference preview in prompt area
-  const preview=document.getElementById('refPreview');
-  const img=document.getElementById('refImage');
-  img.src=referenceImageDataUrl;
-  preview.style.display='block';
-
-  closeEditor();
-  showToast('参考图已就绪，可输入提示词生成 AI 图像');
 }
 
 function handleSaveAll(){
