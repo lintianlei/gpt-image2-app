@@ -10,9 +10,39 @@
 <link rel="manifest" href="manifest.json">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:#0A0A0F;color:#fff;overflow:hidden;height:100vh;display:flex;flex-direction:column;user-select:none;}
-.status-bar{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;color:#fff;font-size:14px;font-weight:600;}
-.page{display:none;flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 16px;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:#0A0A0F;color:#fff;overflow:hidden;height:100vh;display:flex;flex-direction:column;user-select:none;transition:background 0.3s,color 0.3s;}
+body.light-mode{background:#F5F5F8;color:#1A1A2E;}
+/* Light mode overrides */
+body.light-mode .header-title{color:#1A1A2E;}
+body.light-mode .header-btn{background:#E8E8F0;color:#6B6B7B;}
+body.light-mode .card{background:#FFFFFF;border-color:rgba(0,0,0,0.08);}
+body.light-mode .card-title{color:#1A1A2E;}
+body.light-mode .section-label{color:#8B8B9D;}
+body.light-mode .chip:not(.active){background:#E8E8F0;color:#6B6B7B;}
+body.light-mode .prompt-input{background:#F0F0F5;color:#1A1A2E;}
+body.light-mode .prompt-input::placeholder{color:#9E9EB0;}
+body.light-mode .btn-secondary{background:#E8E8F0;border-color:rgba(0,0,0,0.06);color:#6B6B7B;}
+body.light-mode .settings-item{border-color:rgba(0,0,0,0.04);}
+body.light-mode .settings-label{color:#1A1A2E;}
+body.light-mode .settings-value{color:#8B8B9D;}
+body.light-mode .stat-num{color:#1A1A2E;}
+body.light-mode .bio{color:#8B8B9D;}
+body.light-mode .model-option:not(:first-child){background:#F0F0F5;color:#6B6B7B;}
+body.light-mode .model-option:first-child{background:rgba(124,58,237,0.08);}
+body.light-mode .form-input{background:#F0F0F5;}
+body.light-mode .form-input input{color:#1A1A2E;}
+body.light-mode .tab-pill{background:rgba(255,255,255,0.95);border-color:rgba(0,0,0,0.08);}
+body.light-mode .tab-item{color:#9E9EB0;}
+body.light-mode .tab-item.active{background:#7C3AED;color:#fff;}
+body.light-mode .version-tag{color:#C0C0D0;}
+body.light-mode .status-bar{color:#1A1A2E;}
+body.light-mode .inspire-link{color:#7C3AED;}
+body.light-mode .prompt-tag{background:#E8E8F0;color:#7C3AED;}
+body.light-mode .prompt-title{color:#1A1A2E;}
+body.light-mode .prompt-desc{color:#6B6B7B;}
+body.light-mode .toggle-switch{background:#7C3AED;}
+.status-bar{height:44px;display:flex;align-items:center;padding:0 24px;font-size:14px;font-weight:600;}
+.page{display:none;flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 100px;} /* extra bottom padding to avoid tab bar overlap */
 .page.active{display:block;}
 .header{display:flex;align-items:center;justify-content:space-between;padding:8px 0 16px;}
 .header-title{font-size:24px;font-weight:700;color:#fff;}
@@ -90,7 +120,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
 
 <div class="status-bar">
   <span id="timeDisplay">9:41</span>
-  <span style="letter-spacing:2px;">●●● ●</span>
+  <span></span>
 </div>
 
 <!-- Page: Home -->
@@ -280,14 +310,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
   
   <div class="card">
     <div class="stats-row">
-      <div class="stat-item"><div class="stat-num">128</div><div class="stat-label">已生成</div></div>
-      <div class="stat-item"><div class="stat-num">36</div><div class="stat-label">已收藏</div></div>
-      <div class="stat-item"><div class="stat-num">892</div><div class="stat-label">API调用</div></div>
+      <div class="stat-item"><div class="stat-num" id="statGenerated">0</div><div class="stat-label">已生成</div></div>
+      <div class="stat-item"><div class="stat-num" id="statFavorites">0</div><div class="stat-label">已收藏</div></div>
+      <div class="stat-item"><div class="stat-num" id="statApiCalls">0</div><div class="stat-label">API调用</div></div>
     </div>
   </div>
   
   <div class="card" style="padding:0;overflow:hidden;">
-    <div class="settings-item"><span class="settings-label">主题设置</span><span class="settings-value">深色模式</span></div>
+    <div class="settings-item">
+      <span class="settings-label">主题设置</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:#8B8B9D;" id="themeLabel">深色模式</span>
+        <div class="toggle-switch" id="themeToggle" onclick="toggleTheme()"><div class="toggle-dot"></div></div>
+      </div>
+    </div>
     <div class="settings-item"><span class="settings-label">语言</span><span class="settings-value">简体中文</span></div>
     <div class="settings-item"><span class="settings-label">推送通知</span><div class="toggle-switch" onclick="this.style.justifyContent=this.style.justifyContent==='flex-start'?'flex-end':'flex-start'"><div class="toggle-dot"></div></div></div>
     <div class="settings-item"><span class="settings-label">关于</span><span class="settings-value">v1.0.0</span></div>
@@ -326,6 +362,51 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
 <div class="loading-overlay" id="loading">
   <div class="spinner"></div>
 </div>
+
+<!-- Image Upload & Editor -->
+<input type="file" id="fileInput" accept="image/*" style="display:none;">
+<div class="editor-overlay" id="editorOverlay">
+  <div class="editor-container">
+    <div class="editor-header">
+      <span style="font-size:16px;font-weight:600;">编辑图片</span>
+      <button class="editor-close" onclick="closeEditor()">✕</button>
+    </div>
+    <div class="editor-canvas-wrap">
+      <canvas id="editorCanvas"></canvas>
+    </div>
+    <div class="editor-tools">
+      <button class="editor-tool" onclick="editorRotate()">🔄 旋转</button>
+      <button class="editor-tool" onclick="editorFlip()">↔ 翻转</button>
+      <button class="editor-tool" onclick="editorReset()">↩ 重置</button>
+    </div>
+    <div class="editor-actions">
+      <button class="editor-btn cancel" onclick="closeEditor()">取消</button>
+      <button class="editor-btn confirm" onclick="editorConfirm()">✓ 确认使用</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.editor-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;}
+.editor-overlay.show{display:flex;}
+.editor-container{background:#12121A;border-radius:20px;width:100%;max-width:400px;overflow:hidden;}
+body.light-mode .editor-container{background:#fff;}
+.editor-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);color:#E0E0E8;}
+body.light-mode .editor-header{color:#1A1A2E;border-color:rgba(0,0,0,0.08);}
+.editor-close{background:none;border:none;color:#8B8B9D;font-size:20px;cursor:pointer;padding:4px;}
+.editor-canvas-wrap{display:flex;align-items:center;justify-content:center;padding:16px;min-height:260px;background:#0A0A0F;}
+body.light-mode .editor-canvas-wrap{background:#F0F0F5;}
+#editorCanvas{max-width:100%;max-height:280px;border-radius:10px;}
+.editor-tools{display:flex;gap:6px;justify-content:center;padding:0 16px 12px;flex-wrap:wrap;}
+.editor-tool{padding:8px 16px;border-radius:20px;background:#1E1E2A;border:none;color:#8B8B9D;font-size:13px;cursor:pointer;}
+body.light-mode .editor-tool{background:#E8E8F0;color:#6B6B7B;}
+.editor-tool:active{transform:scale(0.95);}
+.editor-actions{display:flex;gap:8px;padding:12px 16px 16px;}
+.editor-btn{flex:1;height:44px;border-radius:22px;font-size:14px;font-weight:600;border:none;cursor:pointer;}
+.editor-btn.cancel{background:#1E1E2A;color:#8B8B9D;}
+body.light-mode .editor-btn.cancel{background:#E8E8F0;color:#6B6B7B;}
+.editor-btn.confirm{background:#7C3AED;color:#fff;}
+</style>
 
 <script>
 function switchTab(tab){
@@ -386,10 +467,10 @@ function usePrompt(btn){
 function handleGenerate(){
   const prompt=document.getElementById('promptInput').value.trim();
   if(!prompt){showToast('请先输入提示词');return;}
-  
+
   const loading=document.getElementById('loading');
   loading.classList.add('show');
-  
+
   setTimeout(()=>{
     loading.classList.remove('show');
     const section=document.getElementById('resultSection');
@@ -399,7 +480,11 @@ function handleGenerate(){
     grid.innerHTML=colors.map(c=>`<div class="img-cell" style="background:linear-gradient(135deg,${c[0]},${c[1]});">🖼</div>`).join('');
     section.scrollIntoView({behavior:'smooth'});
     showToast('生成完成!');
-    
+
+    // Update stats
+    const statEl=document.getElementById('statGenerated');
+    statEl.textContent=parseInt(statEl.textContent)+colors.length;
+
     // Add to gallery
     const gGrid=document.getElementById('galleryGrid');
     const now=new Date();
@@ -409,12 +494,121 @@ function handleGenerate(){
   },2000);
 }
 
+// --- Theme Toggle ---
+function toggleTheme(){
+  const body=document.body;
+  const label=document.getElementById('themeLabel');
+  const toggle=document.getElementById('themeToggle');
+  body.classList.toggle('light-mode');
+  const isLight=body.classList.contains('light-mode');
+  label.textContent=isLight?'浅色模式':'深色模式';
+  toggle.style.justifyContent=isLight?'flex-start':'flex-end';
+  localStorage.setItem('gpt-image2-theme',isLight?'light':'dark');
+}
+// Load saved theme
+(function(){
+  const saved=localStorage.getItem('gpt-image2-theme');
+  if(saved==='light'){
+    document.body.classList.add('light-mode');
+    document.getElementById('themeLabel').textContent='浅色模式';
+    document.getElementById('themeToggle').style.justifyContent='flex-start';
+  }
+})();
+
+// --- Image Upload & Editor ---
+let uploadedFile=null;
+let editorImage=null;
+let editorTransform={rotate:0,flipH:false};
+
+document.getElementById('fileInput').addEventListener('change',function(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  uploadedFile=file;
+
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const img=new Image();
+    img.onload=function(){
+      editorImage=img;
+      editorTransform={rotate:0,flipH:false};
+      document.getElementById('editorOverlay').classList.add('show');
+      renderEditor();
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  this.value='';
+});
+
 function handleUpload(){
-  showToast('图片上传功能已就绪');
+  document.getElementById('fileInput').click();
+}
+
+function renderEditor(){
+  const canvas=document.getElementById('editorCanvas');
+  const ctx=canvas.getContext('2d');
+  if(!editorImage)return;
+
+  let w=editorImage.width,h=editorImage.height;
+  const maxDim=360;
+  if(w>maxDim||h>maxDim){const s=Math.min(maxDim/w,maxDim/h);w*=s;h*=s;}
+
+  canvas.width=w;canvas.height=h;
+  ctx.clearRect(0,0,w,h);
+  ctx.save();
+  ctx.translate(w/2,h/2);
+  ctx.rotate(editorTransform.rotate*Math.PI/180);
+  if(editorTransform.flipH)ctx.scale(-1,1);
+  ctx.drawImage(editorImage,-w/2,-h/2,w,h);
+  ctx.restore();
+}
+
+function editorRotate(){
+  editorTransform.rotate=(editorTransform.rotate+90)%360;
+  renderEditor();
+}
+
+function editorFlip(){
+  editorTransform.flipH=!editorTransform.flipH;
+  renderEditor();
+}
+
+function editorReset(){
+  editorTransform={rotate:0,flipH:false};
+  renderEditor();
+}
+
+function closeEditor(){
+  document.getElementById('editorOverlay').classList.remove('show');
+  editorImage=null;
+}
+
+function editorConfirm(){
+  const canvas=document.getElementById('editorCanvas');
+  // Convert canvas to blob and show in result
+  canvas.toBlob(function(blob){
+    const url=URL.createObjectURL(blob);
+    const resultGrid=document.getElementById('resultGrid');
+    const section=document.getElementById('resultSection');
+    resultGrid.innerHTML=`<div class="img-cell" style="padding:0;"><img src="${url}" alt="edited" style="width:100%;height:100%;object-fit:contain;border-radius:12px;"></div>`;
+    section.style.display='block';
+    section.scrollIntoView({behavior:'smooth'});
+    closeEditor();
+    showToast('图片已加载，可继续生成 AI 图像');
+
+    // Update gallery
+    const gGrid=document.getElementById('galleryGrid');
+    const now=new Date();
+    const dateStr=(now.getMonth()+1)+'月'+now.getDate()+'日';
+    gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="background:linear-gradient(135deg,#7C3AED,#3B82F6);"><img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;"><span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;">${dateStr}</span></div>`);
+    if(gGrid.children.length>8)gGrid.lastElementChild.remove();
+  },'image/png');
 }
 
 function handleSaveAll(){
   showToast('图片已保存到作品库');
+  const statEl=document.getElementById('statFavorites');
+  statEl.textContent=parseInt(statEl.textContent)+1;
   switchTab('gallery');
 }
 
@@ -429,6 +623,10 @@ function saveApiConfig(){
 
 function testConnection(){
   showToast('连接测试通过 ✓');
+  const statEl=document.getElementById('statApiCalls');
+  statEl.textContent=parseInt(statEl.textContent)+1;
+  // Save config
+  saveApiConfig();
 }
 
 function showToast(msg){
