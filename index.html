@@ -562,16 +562,16 @@ function calculateImageSize(tier, ratio){
   if(!p) return '1024x1024';
   const {width:rw,height:rh}=p;
   if(rw===rh){
-    const side=tier==='4K'?MAX_4K_EDGE:tier==='2K'?MAX_2K_EDGE:MAX_1K_EDGE;
+    const side=tier==='4k'?MAX_4K_EDGE:tier==='2k'?MAX_2K_EDGE:MAX_1K_EDGE;
     return normalizeImageSize(side,side);
   }
-  if(tier==='1K'){
+  if(tier==='1k'){
     const short=MAX_1K_EDGE;
     const w=rw>rh?roundToMultiple(short*rw/rh,SIZE_MULTIPLE):short;
     const h=rw>rh?short:roundToMultiple(short*rh/rw,SIZE_MULTIPLE);
     return normalizeImageSize(w,h);
   }
-  const longSide=tier==='2K'?MAX_2K_EDGE:MAX_4K_EDGE;
+  const longSide=tier==='2k'?MAX_2K_EDGE:MAX_4K_EDGE;
   const w=rw>rh?longSide:roundToMultiple(longSide*rw/rh,SIZE_MULTIPLE);
   const h=rw>rh?roundToMultiple(longSide*rh/rw,SIZE_MULTIPLE):longSide;
   return normalizeImageSize(w,h);
@@ -613,7 +613,7 @@ async function handleGenerate(){
   if(ratioVal!=='auto'&&sizeTier!=='auto'){
     finalSize=calculateImageSize(sizeTier,ratioVal);
   }else if(ratioVal!=='auto'){
-    finalSize=calculateImageSize('1K',ratioVal);
+    finalSize=calculateImageSize('1k',ratioVal);
   }
 
   const hasReferenceImage=!!referenceImageDataUrl;
