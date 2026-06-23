@@ -382,21 +382,22 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 </div>
 
 <!-- Full-screen Image Viewer (with pinch-zoom & pan) -->
-<div class="viewer-overlay" id="viewerOverlay" onclick="closeViewer(event)">
+<div class="viewer-overlay" id="viewerOverlay">
   <div class="viewer-container">
     <div class="viewer-header">
+      <button class="viewer-back" onclick="closeViewer()">←</button>
       <span class="viewer-info" id="viewerInfo">1024 × 1024</span>
       <div style="display:flex;gap:4px;align-items:center;">
         <button class="viewer-btn sm" onclick="viewerZoomOut()" title="缩小">−</button>
         <span id="viewerZoomLevel" style="color:#fff;font-size:12px;min-width:32px;text-align:center;">100%</span>
         <button class="viewer-btn sm" onclick="viewerZoomIn()" title="放大">+</button>
-        <button class="viewer-btn sm" onclick="viewerZoomReset()" title="重置" style="margin-right:4px;">⊡</button>
+        <button class="viewer-btn sm" onclick="viewerZoomReset()" title="重置">⊡</button>
         <button class="viewer-btn" onclick="saveViewerImage()">💾 保存</button>
         <button class="viewer-btn close" onclick="closeViewer()">✕</button>
       </div>
     </div>
-    <div class="viewer-body" id="viewerBody">
-      <img id="viewerImage" src="" alt="full size" draggable="false">
+    <div class="viewer-body" id="viewerBody" onclick="closeViewer()">
+      <img id="viewerImage" src="" alt="full size" draggable="false" onclick="event.stopPropagation()">
     </div>
   </div>
 </div>
@@ -410,7 +411,9 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .viewer-btn{padding:6px 14px;border-radius:18px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:#7C3AED;color:#fff;white-space:nowrap;}
 .viewer-btn.sm{width:32px;height:32px;padding:0;border-radius:16px;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
 .viewer-btn.close{background:rgba(255,255,255,0.15);color:#fff;padding:6px 12px;}
-.viewer-body{flex:1;overflow:hidden;position:relative;touch-action:none;}
+.viewer-back{background:none;border:none;color:#fff;font-size:22px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:4px;}
+.viewer-back:active{opacity:0.6;}
+.viewer-body{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:pointer;}
 .viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;transition:transform 0.05s;}
 </style>
 
@@ -819,6 +822,7 @@ function viewerZoomReset(){
 (function(){
   const body=document.getElementById('viewerBody');
   let touches=0,lastTouchDist=0;
+  let startX=0,startY=0; // single-finger start position
 
   body.addEventListener('touchstart',function(e){
     touches=e.touches.length;
@@ -830,6 +834,8 @@ function viewerZoomReset(){
       viewerTouchPanX=viewerPanX;
       viewerTouchPanY=viewerPanY;
     } else if(touches===1){
+      startX=e.touches[0].clientX;
+      startY=e.touches[0].clientY;
       viewerTouchPanX=viewerPanX;
       viewerTouchPanY=viewerPanY;
     }
@@ -847,8 +853,8 @@ function viewerZoomReset(){
       viewerApplyTransform();
     } else if(e.touches.length===1 && viewerZoom>1){
       e.preventDefault();
-      viewerPanX=viewerTouchPanX+(e.touches[0].clientX-body.touches[0].clientX);
-      viewerPanY=viewerTouchPanY+(e.touches[0].clientY-body.touches[0].clientY);
+      viewerPanX=viewerTouchPanX+(e.touches[0].clientX-startX);
+      viewerPanY=viewerTouchPanY+(e.touches[0].clientY-startY);
       viewerApplyTransform();
     }
   },{passive:false});
@@ -879,50 +885,58 @@ function viewerZoomReset(){
   },{passive:false});
 })();
 
+// Android hardware back button closes the viewer
+document.addEventListener('backbutton',function(e){
+  const overlay=document.getElementById('viewerOverlay');
+  if(overlay.classList.contains('show')){closeViewer();e.preventDefault();}
+});
+// Also handle popstate for browser back
+window.addEventListener('popstate',function(){
+  if(document.getElementById('viewerOverlay').classList.contains('show'))closeViewer();
+});
+
+function dataUrlToBlob(dataUrl){
+  const parts=dataUrl.split(',');
+  const mime=parts[0].match(/:(.*?);/)[1];
+  const bytes=atob(parts[1]);
+  const arr=new Uint8Array(bytes.length);
+  for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+
 function saveViewerImage(){
   if(!currentViewerSrc){showToast('没有可保存的图片');return;}
 
-  // Method 1: Try native share (works best on mobile)
+  const statEl=document.getElementById('statFavorites');
+
+  // Method 1: Native share (no permissions needed, works on Android)
   if(navigator.share){
-    fetch(currentViewerSrc).then(r=>r.blob()).then(blob=>{
+    try {
+      const blob=dataUrlToBlob(currentViewerSrc);
       const file=new File([blob],'gpt-image2-'+Date.now()+'.png',{type:'image/png'});
-      navigator.share({files:[file]}).catch(()=>{});
-    }).catch(()=>{});
-    showToast('💾 图片已保存');
-    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
-    return;
+      navigator.share({files:[file],title:'GPT IMAGE2'}).catch(()=>{});
+      showToast('💾 已打开分享菜单');
+      statEl.textContent=parseInt(statEl.textContent)+1;
+      return;
+    } catch(e){/* fall through */}
   }
 
-  // Method 2: Canvas download (works in most environments)
-  const img=new Image();
-  img.onload=function(){
-    const c=document.createElement('canvas');
-    c.width=img.width;c.height=img.height;
-    c.getContext('2d').drawImage(img,0,0);
-    c.toBlob(function(blob){
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;
-      a.download='gpt-image2-'+Date.now()+'.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    },'image/png');
-  };
-  img.onerror=function(){
-    // Method 3: Direct download (last resort)
+  // Method 2: Open in new tab (user can long-press to save)
+  const w=window.open('about:blank','_blank');
+  if(w){
+    w.document.write('<img src="'+currentViewerSrc+'" style="max-width:100%;margin:auto;display:block;"><p style="text-align:center;font-family:sans-serif;color:#666;margin-top:16px;">长按图片选择「保存图片」</p>');
+    showToast('📋 在新页面中长按保存');
+  } else {
+    // Method 3: Last resort - download attempt
     const a=document.createElement('a');
     a.href=currentViewerSrc;
     a.download='gpt-image2-'+Date.now()+'.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  };
-  img.src=currentViewerSrc;
-
-  showToast('💾 图片已保存');
-  document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+    showToast('💾 图片已保存');
+  }
+  statEl.textContent=parseInt(statEl.textContent)+1;
 }
 
 function toggleApiKey(){
