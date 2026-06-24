@@ -1016,18 +1016,17 @@ function saveViewerImage(){
     return;
   }
 
-  // Web 降级: fetch → blob → 下载
-  fetch(src).then(function(r){return r.blob();}).then(function(blob){
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.href=url;a.download=name;a.style.display='none';
-    document.body.appendChild(a);a.click();
-    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
-    showToast('💾 下载中...');
-    stat.textContent=parseInt(stat.textContent)+1;
-  }).catch(function(){
-    showToast('⚠️ 保存失败，请重试');
-  });
+  // Web 降级: 直接 base64 解码 → Blob → 下载 (不用 fetch，避免数据丢失)
+  var raw=atob(base64),arr=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+  var blob=new Blob([arr],{type:'image/png'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=name;a.style.display='none';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
+  showToast('💾 下载中（原始分辨率）');
+  stat.textContent=parseInt(stat.textContent)+1;
 }
 
 function toggleApiKey(){
