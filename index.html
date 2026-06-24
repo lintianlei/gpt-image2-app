@@ -670,19 +670,19 @@ async function handleGenerate(){
     const dateStr=(now.getMonth()+1)+'月'+now.getDate()+'日';
     // Add ALL generated images to gallery
     if(data.data && data.data.length>0){
-      const allSizes=finalSize;
-      data.data.forEach((img,i)=>{
-        const thumbSrc=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
-        // only add up to 4 images per generation batch to avoid clutter
-        if(i<4){
-          gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer(${storeImage(thumbSrc)},'${allSizes}')">
-            <img src="${thumbSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
-            <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
-          </div>`);
-          // Save to IndexedDB for persistence
-          saveGalleryImage(thumbSrc, allSizes);
-        }
-      });
+      var allSizes=finalSize;
+      for(var i=0;i<data.data.length;i++){
+        if(i>=4)break;
+        var img=data.data[i];
+        var b64=img.b64_json||'';
+        var id=storeImage(b64);
+        var blobUrl=getStoredImage(id);
+        gGrid.insertAdjacentHTML('afterbegin','<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('+id+',\''+allSizes+'\')">'+
+          '<img src="'+blobUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">'+
+          '<span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">'+dateStr+'</span>'+
+        '</div>');
+        saveGalleryImage(b64,allSizes);
+      }
     } else {
       gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="background:linear-gradient(135deg,#7C3AED,#3B82F6);">${dateStr}</div>`);
     }
@@ -739,12 +739,12 @@ function openGalleryDB(){
   });
 }
 
-async function saveGalleryImage(dataUrl,size){
+async function saveGalleryImage(b64,size){
   try {
     const db=await openGalleryDB();
     const tx=db.transaction('images','readwrite');
     tx.objectStore('images').add({
-      dataUrl: dataUrl,
+      b64: b64,
       size: size || '1024x1024',
       date: new Date().toISOString()
     });
@@ -770,14 +770,17 @@ async function loadGallery(){
 
     const gGrid=document.getElementById('galleryGrid');
     gGrid.innerHTML=''; // clear static placeholders
-    all.reverse().forEach(item=>{
-      if(item.dataUrl){
-        const d=new Date(item.date);
-        const dateStr=(d.getMonth()+1)+'月'+d.getDate()+'日';
-        gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer(${storeImage(item.dataUrl)},'${item.size||'1024x1024'}')">
-          <img src="${item.dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
-          <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
-        </div>`);
+    all.reverse().forEach(function(item){
+      if(item.b64||item.dataUrl){
+        var b64=item.b64||(item.dataUrl.includes(',')?item.dataUrl.split(',')[1]:item.dataUrl);
+        var d=new Date(item.date);
+        var dateStr=(d.getMonth()+1)+'月'+d.getDate()+'日';
+        var id=storeImage(b64);
+        var blobUrl=getStoredImage(id);
+        gGrid.insertAdjacentHTML('afterbegin','<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('+id+',\''+(item.size||'1024x1024')+'\')">'+
+          '<img src="'+blobUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">'+
+          '<span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">'+dateStr+'</span>'+
+        '</div>');
       }
     });
     document.getElementById('statGenerated').textContent=all.length;
@@ -836,11 +839,25 @@ function handleSaveAll(){
   document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+images.length;
 }
 
-// --- Image Store (avoid embedding huge base64 in onclick) ---
+// --- Image Store (用 Blob URL 替代 data URL，绕过 WebView 2MB 限制) ---
 const imageStore=[];
 let imageStoreId=0;
-function storeImage(dataUrl){const id=imageStoreId++;imageStore[id]=dataUrl;return id;}
-function getStoredImage(id){return imageStore[id];}
+function storeImage(data){
+  var id=imageStoreId++;
+  // 兼容 data URL 和纯 base64
+  var b64=data.includes(',')?data.split(',')[1]:data;
+  // 转为 Blob URL（绕过 WebView data URL 2MB 限制）
+  var blobUrl='';
+  try {
+    var raw=atob(b64),arr=new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+    blobUrl=URL.createObjectURL(new Blob([arr],{type:'image/png'}));
+  } catch(e){}
+  imageStore[id]={blobUrl:blobUrl,b64:b64};
+  return id;
+}
+function getStoredImage(id){var s=imageStore[id];return s?s.blobUrl||s.b64:null;}
+function getStoredBase64(id){var s=imageStore[id];return s?s.b64:null;}
 
 // --- Full-screen Image Viewer (with zoom & pan) ---
 let currentViewerId=null;
@@ -992,16 +1009,15 @@ function downloadBlob(blob,name){
 }
 
 function saveViewerImage(){
-  var src=currentViewerId!=null?getStoredImage(currentViewerId):null;
-  if(!src){showToast('没有可保存的图片');return;}
+  var b64=getStoredBase64(currentViewerId);
+  if(!b64){showToast('没有可保存的图片');return;}
   var name='gpt-image2-'+Date.now()+'.png';
-  var base64=src.includes(',')?src.split(',')[1]:src;
   var stat=document.getElementById('statFavorites');
 
   // Capacitor Filesystem: 写到 App 内部 Documents 目录（无需权限）
   if(typeof Capacitor!=='undefined'&&Capacitor.Plugins&&Capacitor.Plugins.Filesystem){
     Capacitor.Plugins.Filesystem.writeFile({
-      path:name,data:base64,directory:'DOCUMENTS',recursive:true
+      path:name,data:b64,directory:'DOCUMENTS',recursive:true
     }).then(function(result){
       var uri=result&&result.uri?result.uri:'';
       // 再通过 Share 导出到相册/下载
@@ -1017,7 +1033,7 @@ function saveViewerImage(){
   }
 
   // Web 降级: 直接 base64 解码 → Blob → 下载 (不用 fetch，避免数据丢失)
-  var raw=atob(base64),arr=new Uint8Array(raw.length);
+  var raw=atob(b64),arr=new Uint8Array(raw.length);
   for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
   var blob=new Blob([arr],{type:'image/png'});
   var url=URL.createObjectURL(blob);
