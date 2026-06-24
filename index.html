@@ -996,38 +996,38 @@ function downloadBlob(blob,name){
 function saveViewerImage(){
   var src=currentViewerId!=null ? getStoredImage(currentViewerId) : null;
   if(!src){showToast('没有可保存的图片');return;}
-  var statEl=document.getElementById('statFavorites');
-  var base64=src.includes(',') ? src.split(',')[1] : src;
-  var fname='gpt-image2-'+Date.now()+'.png';
+  var name='gpt-image2-'+Date.now()+'.png';
 
-  // Capacitor Filesystem: 直接写入 Downloads 目录
+  // 1. 有 Capacitor 原生插件 → 直接写 Download 目录
+  if(typeof Capacitor!=='undefined'&&Capacitor.Plugins&&Capacitor.Plugins.Filesystem){
+    var base64=src.includes(',')?src.split(',')[1]:src;
+    Capacitor.Plugins.Filesystem.writeFile({
+      path:'Download/'+name,data:base64,directory:'ExternalStorage',recursive:true
+    }).then(function(){
+      showToast('✅ 已保存到 Downloads');
+      document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+    }).catch(function(e){
+      showToast('⚠️ 需要开启存储权限，请在设置中授权');
+    });
+    return;
+  }
+
+  // 2. 纯 WebView：blob URL 下载
   try {
-    if(typeof Capacitor!=='undefined'&&Capacitor.Plugins&&Capacitor.Plugins.Filesystem){
-      Capacitor.Plugins.Filesystem.writeFile({
-        path: 'Download/'+fname,
-        data: base64,
-        directory: 'ExternalStorage',
-        recursive: true
-      }).then(function(){
-        showToast('✅ 已保存到 Downloads/'+fname);
-        statEl.textContent=parseInt(statEl.textContent)+1;
-      }).catch(function(e){
-        showToast('⚠️ 保存失败: '+(e.message||'').slice(0,30));
-      });
-      return;
-    }
-  } catch(e){}
-
-  // WebView 降级
-  var a=document.createElement('a');
-  a.href=src;
-  a.download=fname;
-  a.style.display='none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  showToast('💾 下载中...');
-  statEl.textContent=parseInt(statEl.textContent)+1;
+    var parts=src.split(','),mime=parts[0].match(/:(.*?);/)[1]||'image/png';
+    var bytes=atob(parts[1]),arr=new Uint8Array(bytes.length);
+    for(var i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+    var blob=new Blob([arr],{type:mime});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=name;a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},2000);
+    showToast('✅ 下载中...');
+    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+  } catch(e){
+    showToast('⚠️ 保存失败，请开启存储权限');
+  }
 }
 
 function toggleApiKey(){
