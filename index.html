@@ -982,44 +982,38 @@ function downloadBlob(blob,name){
 function saveViewerImage(){
   const src=currentViewerId!=null ? getStoredImage(currentViewerId) : null;
   if(!src){showToast('没有可保存的图片');return;}
+  const name='gpt-image2-'+Date.now()+'.png';
 
-  // Method 1: Download data URL directly via anchor click (no canvas needed)
+  // Method 1: navigator.share — 系统分享菜单，可保存到相册/文件
+  // 在Android WebView中最可靠，不需要存储权限
+  try {
+    if(navigator.share){
+      const parts=src.split(',');
+      const mime=parts[0].match(/:(.*?);/)[1]||'image/png';
+      const bytes=atob(parts[1]);
+      const arr=new Uint8Array(bytes.length);
+      for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+      const file=new File([arr],name,{type:mime});
+      navigator.share({files:[file]});
+      showToast('📤 已打开分享菜单');
+      document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+      return;
+    }
+  } catch(e){/* fall through */}
+
+  // Method 2: a.click 下载
   try {
     const a=document.createElement('a');
     a.href=src;
-    a.download='gpt-image2-'+(currentViewerSize||'image')+'.png';
+    a.download=name;
     a.style.display='none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     showToast('💾 图片已保存');
     document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
-    return;
-  } catch(e){/* fall through */}
-
-  // Method 2: Canvas fallback
-  try {
-    const img=new Image();
-    img.onload=function(){
-      const c=document.createElement('canvas');
-      c.width=img.naturalWidth;c.height=img.naturalHeight;
-      c.getContext('2d').drawImage(img,0,0);
-      c.toBlob(function(blob){
-        if(blob){
-          const url=URL.createObjectURL(blob);
-          const a=document.createElement('a');
-          a.href=url;a.download='gpt-image2-'+Date.now()+'.png';a.style.display='none';
-          document.body.appendChild(a);a.click();
-          setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
-          showToast('💾 图片已保存');
-        }
-      },'image/png');
-    };
-    img.onerror=function(){showToast('保存失败');};
-    img.src=src;
-    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
   } catch(e){
-    showToast('保存失败: '+e.message);
+    showToast('保存失败，请长按图片');
   }
 }
 
