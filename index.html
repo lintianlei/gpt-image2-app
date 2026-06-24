@@ -420,7 +420,8 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .viewer-back{background:none;border:none;color:#fff;font-size:22px;padding:6px 8px;cursor:pointer;display:flex;align-items:center;}
 .viewer-back:active{opacity:0.6;}
 .viewer-body{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:pointer;}
-.viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;transition:transform 0.05s;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto;}
+.viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto;}
+.viewer-body img.animating{transition:transform 0.15s ease;}
 </style>
 
 <input type="file" id="fileInput" accept="image/*" style="display:none;">
@@ -877,18 +878,27 @@ function viewerApplyTransform(){
 }
 
 function viewerZoomIn(){
+  var img=document.getElementById('viewerImage');
+  img.classList.add('animating');
   viewerZoom=Math.min(8,viewerZoom*1.5);
   viewerApplyTransform();
+  setTimeout(function(){img.classList.remove('animating');},160);
 }
 
 function viewerZoomOut(){
+  var img=document.getElementById('viewerImage');
+  img.classList.add('animating');
   viewerZoom=Math.max(0.25,viewerZoom/1.5);
   viewerApplyTransform();
+  setTimeout(function(){img.classList.remove('animating');},160);
 }
 
 function viewerZoomReset(){
+  var img=document.getElementById('viewerImage');
+  img.classList.add('animating');
   viewerZoom=1;viewerPanX=0;viewerPanY=0;
   viewerApplyTransform();
+  setTimeout(function(){img.classList.remove('animating');},160);
 }
 
 // Touch events for pinch-zoom & pan
@@ -897,16 +907,20 @@ function viewerZoomReset(){
   let touches=0,lastTouchDist=0;
   let startX=0,startY=0; // single-finger start position
 
+  var imgEl=document.getElementById('viewerImage');
+
   body.addEventListener('touchstart',function(e){
+    // Remove animation class during touch for instant response
+    imgEl.classList.remove('animating');
     touches=e.touches.length;
-    if(touches===2){
-      const dx=e.touches[0].clientX-e.touches[1].clientX;
-      const dy=e.touches[0].clientY-e.touches[1].clientY;
+    if(touches>=2){
+      var dx=e.touches[0].clientX-e.touches[1].clientX;
+      var dy=e.touches[0].clientY-e.touches[1].clientY;
       lastTouchDist=Math.sqrt(dx*dx+dy*dy);
       viewerTouchZoom=viewerZoom;
       viewerTouchPanX=viewerPanX;
       viewerTouchPanY=viewerPanY;
-    } else if(touches===1){
+    } else {
       startX=e.touches[0].clientX;
       startY=e.touches[0].clientY;
       viewerTouchPanX=viewerPanX;
@@ -915,12 +929,12 @@ function viewerZoomReset(){
   },{passive:true});
 
   body.addEventListener('touchmove',function(e){
-    if(e.touches.length===2){
+    if(e.touches.length>=2){
       e.preventDefault();
-      const dx=e.touches[0].clientX-e.touches[1].clientX;
-      const dy=e.touches[0].clientY-e.touches[1].clientY;
-      const dist=Math.sqrt(dx*dx+dy*dy);
-      if(lastTouchDist>0){
+      var dx=e.touches[0].clientX-e.touches[1].clientX;
+      var dy=e.touches[0].clientY-e.touches[1].clientY;
+      var dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist>0&&lastTouchDist>0){
         viewerZoom=Math.max(0.25,Math.min(8,viewerTouchZoom*(dist/lastTouchDist)));
       }
       viewerApplyTransform();
@@ -932,23 +946,23 @@ function viewerZoomReset(){
     }
   },{passive:false});
 
-  // Double-tap to zoom toggle
-  let lastTap=0;
+  // Double-tap
+  var lastTap=0;
   body.addEventListener('touchend',function(e){
-    if(e.changedTouches.length===1){
-      const now=Date.now();
-      if(now-lastTap<300){
-        // Double tap
-        if(viewerZoom>1.5){
-          viewerZoomReset();
-        } else {
-          viewerZoom=3;
-          viewerApplyTransform();
-        }
+    // Add smooth transition back when user lifts fingers
+    if(e.touches.length===0){
+      imgEl.classList.add('animating');
+      setTimeout(function(){imgEl.classList.remove('animating');},160);
+    }
+    if(e.changedTouches.length===1 && e.touches.length===0){
+      var now=Date.now();
+      if(now-lastTap<350){
+        if(viewerZoom>1.5){viewerZoomReset();}else{viewerZoom=3;viewerApplyTransform();}
       }
       lastTap=now;
-      touches=0;
     }
+    touches=0;
+    lastTouchDist=0;
   },{passive:true});
 
   // Mouse wheel zoom (for desktop/testing)
@@ -984,40 +998,36 @@ function saveViewerImage(){
   if(!src){showToast('没有可保存的图片');return;}
   var statEl=document.getElementById('statFavorites');
   var base64=src.includes(',') ? src.split(',')[1] : src;
+  var fname='gpt-image2-'+Date.now()+'.png';
 
-  // Capacitor 原生保存：Filesystem→Cache→Share
-  if(typeof Capacitor!=='undefined'&&Capacitor.Plugins){
-    var F=Capacitor.Plugins.Filesystem;
-    var S=Capacitor.Plugins.Share;
-    if(S){
-      var fname='gpt-image2-'+Date.now()+'.png';
-      (F?F.writeFile({path:fname,data:base64,directory:'Cache'}):Promise.resolve(null))
-        .then(function(r){return S.share(r&&r.uri?{files:[r.uri]}:{text:'GPT IMAGE2'});})
-        .then(function(){showToast('✅ 已打开分享，选择保存即可');statEl.textContent=parseInt(statEl.textContent)+1;})
-        .catch(function(){showToast('⚠️ 保存失败');});
-      return;
-    }
-  }
-
-  // 纯 Web Share API
+  // Capacitor Filesystem: 直接写入 Downloads 目录
   try {
-    if(navigator.canShare&&navigator.share){
-      var parts=src.split(','),mime=parts[0].match(/:(.*?);/)[1]||'image/png';
-      var bytes=atob(parts[1]),arr=new Uint8Array(bytes.length);
-      for(var i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
-      if(navigator.canShare({files:[new File([arr],'image.png',{type:mime})]})){
-        navigator.share({files:[new File([arr],'image.png',{type:mime})]});
-        showToast('📤 已打开分享');
+    if(typeof Capacitor!=='undefined'&&Capacitor.Plugins&&Capacitor.Plugins.Filesystem){
+      Capacitor.Plugins.Filesystem.writeFile({
+        path: 'Download/'+fname,
+        data: base64,
+        directory: 'ExternalStorage',
+        recursive: true
+      }).then(function(){
+        showToast('✅ 已保存到 Downloads/'+fname);
         statEl.textContent=parseInt(statEl.textContent)+1;
-        return;
-      }
+      }).catch(function(e){
+        showToast('⚠️ 保存失败: '+(e.message||'').slice(0,30));
+      });
+      return;
     }
   } catch(e){}
 
-  // 最后降级：打开新页长按保存
-  var w=window.open('about:blank','_blank');
-  if(w){w.document.write('<!DOCTYPE html><html><head><meta name=viewport content="width=device-width,initial-scale=1"><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}p{position:fixed;bottom:20px;left:0;right:0;text-align:center;color:#999;font-family:sans-serif;font-size:14px}</style></head><body><img src="'+src+'"><p>长按图片 → 保存到相册</p></body></html>');w.document.close();}
-  showToast('📋 长按图片保存到相册');
+  // WebView 降级
+  var a=document.createElement('a');
+  a.href=src;
+  a.download=fname;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('💾 下载中...');
+  statEl.textContent=parseInt(statEl.textContent)+1;
 }
 
 function toggleApiKey(){
