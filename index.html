@@ -650,7 +650,7 @@ async function handleGenerate(){
       grid.innerHTML=data.data.map((img,i)=>{
         const src=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
         return `<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;animation:fadeIn 0.3s ease;">
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer('${src.replace(/'/g,"\\'")}','${reqSize}')">
+          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer(${storeImage(src)},'${reqSize}')">
           <span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:2;">${reqSize}</span>
         </div>`;
       });
@@ -674,7 +674,7 @@ async function handleGenerate(){
         const thumbSrc=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
         // only add up to 4 images per generation batch to avoid clutter
         if(i<4){
-          gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('${thumbSrc.replace(/'/g,"\\'")}','${allSizes}')">
+          gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer(${storeImage(thumbSrc)},'${allSizes}')">
             <img src="${thumbSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
             <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
           </div>`);
@@ -773,7 +773,7 @@ async function loadGallery(){
       if(item.dataUrl){
         const d=new Date(item.date);
         const dateStr=(d.getMonth()+1)+'月'+d.getDate()+'日';
-        gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('${item.dataUrl.replace(/'/g,"\\'")}','${item.size||'1024x1024'}')">
+        gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer(${storeImage(item.dataUrl)},'${item.size||'1024x1024'}')">
           <img src="${item.dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
           <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
         </div>`);
@@ -835,20 +835,30 @@ function handleSaveAll(){
   document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+images.length;
 }
 
+// --- Image Store (avoid embedding huge base64 in onclick) ---
+const imageStore=[];
+let imageStoreId=0;
+function storeImage(dataUrl){const id=imageStoreId++;imageStore[id]=dataUrl;return id;}
+function getStoredImage(id){return imageStore[id];}
+
 // --- Full-screen Image Viewer (with zoom & pan) ---
-let currentViewerSrc=null;
+let currentViewerId=null;
+let currentViewerSize='';
 let viewerZoom=1;
 let viewerPanX=0, viewerPanY=0;
 let viewerTouchDist=0, viewerTouchZoom=1;
 let viewerTouchPanX=0, viewerTouchPanY=0;
 
-function openViewer(src,size){
-  currentViewerSrc=src;
+function openViewer(imgId,size){
+  const src=getStoredImage(imgId);
+  if(!src){showToast('图片数据不可用');return;}
+  currentViewerId=imgId;
+  currentViewerSize=size||'';
   viewerZoom=1; viewerPanX=0; viewerPanY=0;
   const img=document.getElementById('viewerImage');
   img.src=src;
   img.style.transform='translate(-50%,-50%) scale(1)';
-  document.getElementById('viewerInfo').textContent=size || '查看原图';
+  document.getElementById('viewerInfo').textContent=size||'查看原图';
   document.getElementById('viewerZoomLevel').textContent='100%';
   document.getElementById('viewerOverlay').classList.add('show');
 }
@@ -857,7 +867,7 @@ function closeViewer(e){
   if(e && e.target!==e.currentTarget) return;
   document.getElementById('viewerOverlay').classList.remove('show');
   document.getElementById('viewerImage').src='';
-  currentViewerSrc=null;
+  currentViewerId=null;
 }
 
 function viewerApplyTransform(){
@@ -970,32 +980,47 @@ function downloadBlob(blob,name){
 }
 
 function saveViewerImage(){
-  if(!currentViewerSrc){showToast('没有可保存的图片');return;}
+  const src=currentViewerId!=null ? getStoredImage(currentViewerId) : null;
+  if(!src){showToast('没有可保存的图片');return;}
 
-  // Use Image+Canvas to handle both data: URLs and http URLs
-  const img=new Image();
-  
-  img.onload=function(){
-    try {
+  // Method 1: Download data URL directly via anchor click (no canvas needed)
+  try {
+    const a=document.createElement('a');
+    a.href=src;
+    a.download='gpt-image2-'+(currentViewerSize||'image')+'.png';
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('💾 图片已保存');
+    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+    return;
+  } catch(e){/* fall through */}
+
+  // Method 2: Canvas fallback
+  try {
+    const img=new Image();
+    img.onload=function(){
       const c=document.createElement('canvas');
-      c.width=img.naturalWidth;
-      c.height=img.naturalHeight;
+      c.width=img.naturalWidth;c.height=img.naturalHeight;
       c.getContext('2d').drawImage(img,0,0);
       c.toBlob(function(blob){
         if(blob){
-          downloadBlob(blob,'gpt-image2-'+Date.now()+'.png');
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement('a');
+          a.href=url;a.download='gpt-image2-'+Date.now()+'.png';a.style.display='none';
+          document.body.appendChild(a);a.click();
+          setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
           showToast('💾 图片已保存');
-          document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
         }
       },'image/png');
-    } catch(e){
-      showToast('保存失败: '+e.message);
-    }
-  };
-  img.onerror=function(){
-    showToast('⚠️ 图片加载失败，无法保存');
-  };
-  img.src=currentViewerSrc;
+    };
+    img.onerror=function(){showToast('保存失败');};
+    img.src=src;
+    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+  } catch(e){
+    showToast('保存失败: '+e.message);
+  }
 }
 
 function toggleApiKey(){
