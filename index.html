@@ -387,14 +387,16 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
     <div class="viewer-header">
       <button class="viewer-back" onclick="closeViewer()">←</button>
       <span class="viewer-info" id="viewerInfo">1024 × 1024</span>
-      <div style="display:flex;gap:4px;align-items:center;">
-        <button class="viewer-btn sm" onclick="viewerZoomOut()" title="缩小">−</button>
-        <span id="viewerZoomLevel" style="color:#fff;font-size:12px;min-width:32px;text-align:center;">100%</span>
-        <button class="viewer-btn sm" onclick="viewerZoomIn()" title="放大">+</button>
-        <button class="viewer-btn sm" onclick="viewerZoomReset()" title="重置">⊡</button>
+      <div class="viewer-header-right">
         <button class="viewer-btn" onclick="saveViewerImage()">💾 保存</button>
         <button class="viewer-btn close" onclick="closeViewer()">✕</button>
       </div>
+    </div>
+    <div class="viewer-zoom-bar">
+      <button class="viewer-btn sm" onclick="viewerZoomOut()">−</button>
+      <span class="viewer-zoom-pct" id="viewerZoomLevel">100%</span>
+      <button class="viewer-btn sm" onclick="viewerZoomIn()">+</button>
+      <button class="viewer-btn sm" onclick="viewerZoomReset()">⊡</button>
     </div>
     <div class="viewer-body" id="viewerBody" onclick="closeViewer()">
       <img id="viewerImage" src="" alt="full size" draggable="false" onclick="event.stopPropagation()">
@@ -410,8 +412,12 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 .viewer-info{color:#fff;font-size:13px;font-weight:500;white-space:nowrap;}
 .viewer-btn{padding:6px 14px;border-radius:18px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:#7C3AED;color:#fff;white-space:nowrap;}
 .viewer-btn.sm{width:32px;height:32px;padding:0;border-radius:16px;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;}
-.viewer-btn.close{background:rgba(255,255,255,0.15);color:#fff;padding:6px 12px;}
-.viewer-back{background:none;border:none;color:#fff;font-size:22px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:4px;}
+.viewer-btn.close{background:rgba(255,255,255,0.15);color:#fff;padding:6px 10px;}
+.viewer-header-right{display:flex;gap:4px;align-items:center;flex-shrink:0;}
+.viewer-zoom-bar{display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 0;background:rgba(0,0,0,0.3);flex-shrink:0;}
+.viewer-zoom-bar .viewer-btn.sm{width:30px;height:30px;border-radius:15px;font-size:14px;}
+.viewer-zoom-pct{color:#fff;font-size:12px;min-width:36px;text-align:center;font-variant-numeric:tabular-nums;}
+.viewer-back{background:none;border:none;color:#fff;font-size:22px;padding:6px 8px;cursor:pointer;display:flex;align-items:center;}
 .viewer-back:active{opacity:0.6;}
 .viewer-body{flex:1;overflow:hidden;position:relative;touch-action:none;cursor:pointer;}
 .viewer-body img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);transform-origin:center center;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;transition:transform 0.05s;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto;}
@@ -968,7 +974,7 @@ function saveViewerImage(){
 
   // Use Image+Canvas to handle both data: URLs and http URLs
   const img=new Image();
-  img.crossOrigin='anonymous';
+  
   img.onload=function(){
     try {
       const c=document.createElement('canvas');
