@@ -500,54 +500,6 @@ function usePrompt(btn){
   showToast('已填入提示词');
 }
 
-// --- Image Size Calculator ---
-const SIZE_MULTIPLE=16;
-const MAX_4K_EDGE=3840;
-const MAX_2K_EDGE=2560;
-const MAX_1K_EDGE=1024;
-
-function roundToMultiple(v,m){return Math.max(m,Math.round(v/m)*m);}
-function floorToMultiple(v,m){return Math.max(m,Math.floor(v/m)*m);}
-function ceilToMultiple(v,m){return Math.max(m,Math.ceil(v/m)*m);}
-
-function parseRatio(ratio){
-  const m=ratio.match(/^\s*(\d+(?:\.\d+)?)\s*[:xX×]\s*(\d+(?:\.\d+)?)\s*$/);
-  if(!m) return null;
-  const w=Number(m[1]),h=Number(m[2]);
-  return (Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0)?{width:w,height:h}:null;
-}
-
-function normalizeImageSize(w,h){
-  let nw=roundToMultiple(w,SIZE_MULTIPLE),nh=roundToMultiple(h,SIZE_MULTIPLE);
-  const maxEdge=Math.max(nw,nh),maxAllowed=3840;
-  if(maxEdge>maxAllowed){const s=maxAllowed/maxEdge;nw=floorToMultiple(nw*s,SIZE_MULTIPLE);nh=floorToMultiple(nh*s,SIZE_MULTIPLE);}
-  if(nw/nh>3){nw=floorToMultiple(nh*3,SIZE_MULTIPLE);}
-  else if(nh/nw>3){nh=floorToMultiple(nw*3,SIZE_MULTIPLE);}
-  const pixels=nw*nh,maxPixels=maxAllowed*maxAllowed,minPixels=655360;
-  if(pixels>maxPixels){const s=Math.sqrt(maxPixels/pixels);nw=floorToMultiple(nw*s,SIZE_MULTIPLE);nh=floorToMultiple(nh*s,SIZE_MULTIPLE);}
-  else if(pixels<minPixels){const s=Math.sqrt(minPixels/pixels);nw=ceilToMultiple(nw*s,SIZE_MULTIPLE);nh=ceilToMultiple(nh*s,SIZE_MULTIPLE);}
-  return nw+'x'+nh;
-}
-
-function calculateImageSize(tier, ratio){
-  const p=parseRatio(ratio);
-  if(!p) return '1024x1024';
-  const {width:rw,height:rh}=p;
-  if(rw===rh){
-    const side=tier==='4k'?MAX_4K_EDGE:tier==='2k'?MAX_2K_EDGE:MAX_1K_EDGE;
-    return normalizeImageSize(side,side);
-  }
-  if(tier==='1k'){
-    const short=MAX_1K_EDGE;
-    const w=rw>rh?roundToMultiple(short*rw/rh,SIZE_MULTIPLE):short;
-    const h=rw>rh?short:roundToMultiple(short*rh/rw,SIZE_MULTIPLE);
-    return normalizeImageSize(w,h);
-  }
-  const longSide=tier==='2k'?MAX_2K_EDGE:MAX_4K_EDGE;
-  const w=rw>rh?longSide:roundToMultiple(longSide*rw/rh,SIZE_MULTIPLE);
-  const h=rw>rh?roundToMultiple(longSide*rh/rw,SIZE_MULTIPLE):longSide;
-  return normalizeImageSize(w,h);
-}
 async function handleGenerate(){
   const prompt=document.getElementById('promptInput').value.trim();
   if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
@@ -575,18 +527,19 @@ async function handleGenerate(){
   apiEndpoint=apiEndpoint.replace(/\/images\/?$/,'');
   const modelEl=document.getElementById('selectedModel').textContent;
 
-  // Calculate size from tier×ratio
+  // 根据画面比例映射到 DALL-E 3 三种标准尺寸
   const ratioEl=document.querySelector('#ratioChips .chip.active');
-  const ratioVal=ratioEl?.dataset.value||'auto';
-  const sizeEl=document.querySelector('#sizeChips .chip.active');
-  const sizeTier=sizeEl?.dataset.value||'auto';
+  const ratioVal=ratioEl?.dataset.value||'1:1';
 
-  let finalSize='1024x1024';
-  if(ratioVal!=='auto'&&sizeTier!=='auto'){
-    finalSize=calculateImageSize(sizeTier,ratioVal);
-  }else if(ratioVal!=='auto'){
-    finalSize=calculateImageSize('1k',ratioVal);
-  }
+  // gpt-image-2 / DALL-E 3 只支持这三种尺寸
+  const sizeMap={
+    '1:1':'1024x1024',
+    '4:3':'1792x1024','3:2':'1792x1024','16:9':'1792x1024',
+    '2:1':'1792x1024','5:4':'1792x1024','3:1':'1792x1024','21:9':'1792x1024',
+    '3:4':'1024x1792','2:3':'1024x1792','9:16':'1024x1792',
+    '1:2':'1024x1792','4:5':'1024x1792','1:3':'1024x1792','9:21':'1024x1792'
+  };
+  var finalSize=sizeMap[ratioVal]||'1024x1024';
 
   const hasReferenceImage=!!referenceImageDataUrl;
   const isEdit=hasReferenceImage;
