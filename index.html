@@ -645,21 +645,24 @@ async function handleGenerate(){
 
     const data=await resp.json();
 
-    // Render generated images with resolution badge
-    const reqSize=finalSize;
-    if(data.data && data.data.length>0){
-      grid.innerHTML=data.data.map((img,i)=>{
-        const src=img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || '');
-        return `<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;animation:fadeIn 0.3s ease;">
-          <img src="${src}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer(${storeImage(src)},'${reqSize}')">
-          <span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:2;">${reqSize}</span>
-        </div>`;
-      });
-    } else {
-      grid.innerHTML=[`<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">🖼</div>`];
-    }
-
-    // Update stats
+    	    // Pre-store all base64 and render with Blob URLs only (no WebView data URL limit)
+	    if(data.data && data.data.length>0){
+	      var imgIds=[],imgBlobs=[];
+	      for(var i=0;i<data.data.length;i++){
+	        var b=data.data[i].b64_json||'';
+	        imgIds.push(storeImage(b));
+	        imgBlobs.push(getStoredImage(imgIds[i]));
+	      }
+	      grid.innerHTML=imgIds.map(function(id,j){
+	        return '<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;animation:fadeIn 0.3s ease;">'+
+	          '<img src="'+imgBlobs[j]+'" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer('+id+',\''+finalSize+'\')">'+
+	          '<span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:2;">'+finalSize+'</span>'+
+	        '</div>';
+	      }).join('');
+	    } else {
+	      grid.innerHTML='<div class="img-cell" style="background:linear-gradient(135deg,#7C3AED,#EC4899);">IMG</div>';
+	    }
+// Update stats
     document.getElementById('statGenerated').textContent=parseInt(document.getElementById('statGenerated').textContent)+count;
     document.getElementById('statApiCalls').textContent=parseInt(document.getElementById('statApiCalls').textContent)+1;
     showToast('✅ 生成完成!');
