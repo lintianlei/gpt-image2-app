@@ -875,10 +875,14 @@ function openViewer(imgId,size){
   currentViewerId=imgId;
   currentViewerSize=size||'';
   viewerZoom=1; viewerPanX=0; viewerPanY=0;
-  const img=document.getElementById('viewerImage');
+  var img=document.getElementById('viewerImage');
   img.src=src;
   img.style.transform='translate(-50%,-50%) scale(1)';
-  document.getElementById('viewerInfo').textContent=size||'查看原图';
+  // 显示实际分辨率
+  img.onload=function(){
+    document.getElementById('viewerInfo').textContent=size+' ['+img.naturalWidth+'x'+img.naturalHeight+']';
+  };
+  document.getElementById('viewerInfo').textContent=size||'加载中...';
   document.getElementById('viewerZoomLevel').textContent='100%';
   document.getElementById('viewerOverlay').classList.add('show');
 }
@@ -1025,18 +1029,30 @@ function saveViewerImage(){
     return;
   }
 
-  // 用 fetch 创建 blob（比 atob 可靠，支持超大 base64）
-  fetch('data:image/png;base64,'+b64).then(function(r){return r.blob();}).then(function(blob){
+  // 直接用 atob 解码 → Blob（同步，无大小限制）
+  try {
+    var raw=atob(b64);
+    var arr=new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+    var blob=new Blob([arr],{type:'image/png'});
     var url=URL.createObjectURL(blob);
+
+    // 验证：用 Image 对象检查实际像素
+    var img=new Image();
+    img.onload=function(){
+      showToast('✅ 已保存 ['+img.naturalWidth+'x'+img.naturalHeight+']');
+    };
+    img.onerror=function(){showToast('💾 已保存');};
+    img.src=url;
+
     var a=document.createElement('a');
     a.href=url;a.download=name;a.style.display='none';
     document.body.appendChild(a);a.click();
     setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
-    showToast('💾 已保存（原分辨率）');
     stat.textContent=parseInt(stat.textContent)+1;
-  }).catch(function(){
-    showToast('保存失败');
-  });
+  } catch(e){
+    showToast('⚠️ 保存失败: '+e.message);
+  }
 }
 
 function toggleApiKey(){
