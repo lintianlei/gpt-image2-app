@@ -995,21 +995,39 @@ function saveViewerImage(){
   var src=currentViewerId!=null?getStoredImage(currentViewerId):null;
   if(!src){showToast('没有可保存的图片');return;}
   var name='gpt-image2-'+Date.now()+'.png';
+  var base64=src.includes(',')?src.split(',')[1]:src;
+  var stat=document.getElementById('statFavorites');
 
-  // data URL → Blob（用 application/octet-stream 强制下载，避免 WebView 直接渲染）
-  var parts=src.split(','),raw=atob(parts[1]),arr=new Uint8Array(raw.length);
-  for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
-  var blob=new Blob([arr],{type:'application/octet-stream'});
-  var url=URL.createObjectURL(blob);
+  // Capacitor Filesystem: 写到 App 内部 Documents 目录（无需权限）
+  if(typeof Capacitor!=='undefined'&&Capacitor.Plugins&&Capacitor.Plugins.Filesystem){
+    Capacitor.Plugins.Filesystem.writeFile({
+      path:name,data:base64,directory:'DOCUMENTS',recursive:true
+    }).then(function(result){
+      var uri=result&&result.uri?result.uri:'';
+      // 再通过 Share 导出到相册/下载
+      if(Capacitor.Plugins.Share&&uri){
+        return Capacitor.Plugins.Share.share({files:[uri]});
+      }
+      showToast('✅ 已保存');
+      stat.textContent=parseInt(stat.textContent)+1;
+    }).catch(function(e){
+      showToast('⚠️ 保存失败: 请在系统设置中开启存储权限');
+    });
+    return;
+  }
 
-  var a=document.createElement('a');
-  a.href=url;a.download=name;a.style.display='none';
-  document.body.appendChild(a);
-  a.dispatchEvent(new MouseEvent('click'));
-  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
-
-  showToast('💾 下载中...');
-  document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+  // Web 降级: fetch → blob → 下载
+  fetch(src).then(function(r){return r.blob();}).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=name;a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
+    showToast('💾 下载中...');
+    stat.textContent=parseInt(stat.textContent)+1;
+  }).catch(function(){
+    showToast('⚠️ 保存失败，请重试');
+  });
 }
 
 function toggleApiKey(){
