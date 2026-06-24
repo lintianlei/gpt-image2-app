@@ -672,6 +672,8 @@ async function handleGenerate(){
             <img src="${thumbSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
             <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
           </div>`);
+          // Save to IndexedDB for persistence
+          saveGalleryImage(thumbSrc, allSizes);
         }
       });
     } else {
@@ -715,7 +717,68 @@ function toggleTheme(){
   }
 })();
 
-// --- Image Upload & Editor (for reference image) ---
+// --- IndexedDB Gallery Persistence ---
+function openGalleryDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open('gpt-image2-gallery',1);
+    req.onupgradeneeded=function(e){
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains('images')){
+        db.createObjectStore('images',{keyPath:'id',autoIncrement:true});
+      }
+    };
+    req.onsuccess=function(e){resolve(e.target.result);};
+    req.onerror=function(e){reject(e.target.error);};
+  });
+}
+
+async function saveGalleryImage(dataUrl,size){
+  try {
+    const db=await openGalleryDB();
+    const tx=db.transaction('images','readwrite');
+    tx.objectStore('images').add({
+      dataUrl: dataUrl,
+      size: size || '1024x1024',
+      date: new Date().toISOString()
+    });
+    await new Promise((resolve,reject)=>{
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+  } catch(e){console.warn('Gallery save failed:',e);}
+}
+
+async function loadGallery(){
+  try {
+    const db=await openGalleryDB();
+    const tx=db.transaction('images','readonly');
+    const store=tx.objectStore('images');
+    const all=await new Promise((resolve,reject)=>{
+      const req=store.getAll();
+      req.onsuccess=()=>resolve(req.result||[]);
+      req.onerror=()=>reject(req.error);
+    });
+    db.close();
+
+    const gGrid=document.getElementById('galleryGrid');
+    gGrid.innerHTML=''; // clear static placeholders
+    all.reverse().forEach(item=>{
+      if(item.dataUrl){
+        const d=new Date(item.date);
+        const dateStr=(d.getMonth()+1)+'月'+d.getDate()+'日';
+        gGrid.insertAdjacentHTML('afterbegin',`<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('${item.dataUrl.replace(/'/g,"\\'")}','${item.size||'1024x1024'}')">
+          <img src="${item.dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;position:absolute;inset:0;">
+          <span style="position:relative;z-index:1;background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:8px;font-size:10px;">${dateStr}</span>
+        </div>`);
+      }
+    });
+    document.getElementById('statGenerated').textContent=all.length;
+  } catch(e){console.warn('Gallery load failed:',e);}
+}
+loadGallery();
+
+// --- Image Upload (for reference image) ---
 let referenceImageDataUrl=null; // stores the reference image for generation
 
 document.getElementById('fileInput').addEventListener('change',function(e){
@@ -754,22 +817,16 @@ function handleSaveAll(){
       c.height=img.naturalHeight||1024;
       c.getContext('2d').drawImage(img,0,0);
       c.toBlob(function(blob){
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a');
-        a.href=url;
-        a.download='gpt-image2-'+(i+1)+'-'+Date.now()+'.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        saved++;
-        if(saved===images.length)showToast('✅ 已保存 '+saved+' 张图片');
+        if(blob){
+          downloadBlob(blob,'gpt-image2-'+(i+1)+'-'+Date.now()+'.png');
+          saved++;
+          if(saved===images.length)showToast('✅ 已保存 '+saved+' 张图片');
+        }
       },'image/png');
     },i*300);
   });
 
-  const statEl=document.getElementById('statFavorites');
-  statEl.textContent=parseInt(statEl.textContent)+images.length;
+  document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+images.length;
 }
 
 // --- Full-screen Image Viewer (with zoom & pan) ---
@@ -895,31 +952,44 @@ window.addEventListener('popstate',function(){
   if(document.getElementById('viewerOverlay').classList.contains('show'))closeViewer();
 });
 
+function downloadBlob(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=name;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+}
+
 function saveViewerImage(){
   if(!currentViewerSrc){showToast('没有可保存的图片');return;}
 
-  try {
-    // Convert data URL to blob and trigger download
-    const parts=currentViewerSrc.split(',');
-    const mime=parts[0].match(/:(.*?);/)[1]||'image/png';
-    const bytes=atob(parts[1]);
-    const arr=new Uint8Array(bytes.length);
-    for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
-    const blob=new Blob([arr],{type:mime});
-
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download='gpt-image2-'+Date.now()+'.png';
-    a.style.display='none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
-    showToast('💾 图片已保存');
-    document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
-  } catch(e){
-    showToast('保存失败: '+e.message);
-  }
+  // Use Image+Canvas to handle both data: URLs and http URLs
+  const img=new Image();
+  img.crossOrigin='anonymous';
+  img.onload=function(){
+    try {
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth;
+      c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      c.toBlob(function(blob){
+        if(blob){
+          downloadBlob(blob,'gpt-image2-'+Date.now()+'.png');
+          showToast('💾 图片已保存');
+          document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+1;
+        }
+      },'image/png');
+    } catch(e){
+      showToast('保存失败: '+e.message);
+    }
+  };
+  img.onerror=function(){
+    showToast('⚠️ 图片加载失败，无法保存');
+  };
+  img.src=currentViewerSrc;
 }
 
 function toggleApiKey(){
