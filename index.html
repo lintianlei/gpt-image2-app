@@ -818,44 +818,43 @@ function handleUpload(){
   document.getElementById('fileInput').click();
 }
 
-function handleSaveAll(){
-  const images=document.querySelectorAll('#resultGrid img');
-  if(!images.length){showToast('没有可保存的图片');return;}
+async function handleSaveAll(){
+  var stat=document.getElementById('statFavorites');
+  var ids=[];
+  for(var id in imageStore){
+    if(imageStore[id]&&imageStore[id].b64) ids.push(Number(id));
+  }
+  if(!ids.length){showToast('没有可保存的图片');return;}
+  var count=ids.length;
 
-  let saved=0;
-  images.forEach((img,i)=>{
-    setTimeout(()=>{
-      const c=document.createElement('canvas');
-      c.width=img.naturalWidth||1024;
-      c.height=img.naturalHeight||1024;
-      c.getContext('2d').drawImage(img,0,0);
-      c.toBlob(function(blob){
-        if(blob){
-          downloadBlob(blob,'gpt-image2-'+(i+1)+'-'+Date.now()+'.png');
-          saved++;
-          if(saved===images.length)showToast('✅ 已保存 '+saved+' 张图片');
-        }
-      },'image/png');
-    },i*300);
-  });
-
-  document.getElementById('statFavorites').textContent=parseInt(document.getElementById('statFavorites').textContent)+images.length;
+  for(var i=0;i<ids.length;i++){
+    var b64=imageStore[ids[i]].b64;
+    try {
+      var resp=await fetch('data:image/png;base64,'+b64);
+      var blob=await resp.blob();
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url;a.download='gpt-image2-'+(i+1)+'-'+Date.now()+'.png';a.style.display='none';
+      document.body.appendChild(a);a.click();
+      setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
+    } catch(e){}
+  }
+  showToast('✅ 已保存 '+count+' 张');
+  stat.textContent=parseInt(stat.textContent)+count;
 }
 
 // --- Image Store (用 Blob URL 替代 data URL，绕过 WebView 2MB 限制) ---
 const imageStore=[];
 let imageStoreId=0;
-function storeImage(data){
+function storeImage(b64){
   var id=imageStoreId++;
-  // 兼容 data URL 和纯 base64
-  var b64=data.includes(',')?data.split(',')[1]:data;
-  // 转为 Blob URL（绕过 WebView data URL 2MB 限制）
   var blobUrl='';
-  try {
-    var raw=atob(b64),arr=new Uint8Array(raw.length);
-    for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
-    blobUrl=URL.createObjectURL(new Blob([arr],{type:'image/png'}));
-  } catch(e){}
+  if(b64){
+    try {
+      var bytes=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
+      blobUrl=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));
+    } catch(e){console.warn('blob fail for #'+id,e.message);}
+  }
   imageStore[id]={blobUrl:blobUrl,b64:b64};
   return id;
 }
@@ -1002,15 +1001,6 @@ window.addEventListener('popstate',function(){
   if(document.getElementById('viewerOverlay').classList.contains('show'))closeViewer();
 });
 
-function downloadBlob(blob,name){
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download=name;a.style.display='none';
-  document.body.appendChild(a);
-  a.dispatchEvent(new MouseEvent('click'));
-  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
-}
-
 function saveViewerImage(){
   var b64=getStoredBase64(currentViewerId);
   if(!b64){showToast('没有可保存的图片');return;}
@@ -1035,17 +1025,18 @@ function saveViewerImage(){
     return;
   }
 
-  // Web 降级: 直接 base64 解码 → Blob → 下载 (不用 fetch，避免数据丢失)
-  var raw=atob(b64),arr=new Uint8Array(raw.length);
-  for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
-  var blob=new Blob([arr],{type:'image/png'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download=name;a.style.display='none';
-  document.body.appendChild(a);a.click();
-  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
-  showToast('💾 下载中（原始分辨率）');
-  stat.textContent=parseInt(stat.textContent)+1;
+  // 用 fetch 创建 blob（比 atob 可靠，支持超大 base64）
+  fetch('data:image/png;base64,'+b64).then(function(r){return r.blob();}).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=name;a.style.display='none';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},5000);
+    showToast('💾 已保存（原分辨率）');
+    stat.textContent=parseInt(stat.textContent)+1;
+  }).catch(function(){
+    showToast('保存失败');
+  });
 }
 
 function toggleApiKey(){
