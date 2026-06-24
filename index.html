@@ -849,11 +849,15 @@ let imageStoreId=0;
 function storeImage(b64){
   var id=imageStoreId++;
   var blobUrl='';
-  if(b64){
+  if(b64 && b64.length>100){
     try {
-      var bytes=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
-      blobUrl=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));
-    } catch(e){console.warn('blob fail for #'+id,e.message);}
+      var raw=atob(b64);
+      var arr=new Uint8Array(raw.length);
+      for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+      blobUrl=URL.createObjectURL(new Blob([arr],{type:'image/png'}));
+      // Debug: estimate image dimensions from blob size
+      console.log('storeImage #'+id+': b64len='+b64.length+', rawBytes='+raw.length+', blobUrl='+(blobUrl?'ok':'fail'));
+    } catch(e){console.warn('storeImage #'+id+' error:',e.message);}
   }
   imageStore[id]={blobUrl:blobUrl,b64:b64};
   return id;
@@ -1029,15 +1033,17 @@ function saveViewerImage(){
     return;
   }
 
-  // 直接用 atob 解码 → Blob（同步，无大小限制）
+  // 数据完整性检查 + 保存
   try {
+    console.log('saveViewerImage: b64 length='+b64.length);
     var raw=atob(b64);
+    console.log('saveViewerImage: raw bytes='+raw.length+', expected ~'+(1920*2560*4));
     var arr=new Uint8Array(raw.length);
     for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
     var blob=new Blob([arr],{type:'image/png'});
     var url=URL.createObjectURL(blob);
 
-    // 验证：用 Image 对象检查实际像素
+    // 验证实际像素
     var img=new Image();
     img.onload=function(){
       showToast('✅ 已保存 ['+img.naturalWidth+'x'+img.naturalHeight+']');
