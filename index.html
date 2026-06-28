@@ -223,7 +223,8 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
     <div class="card-title">生成结果</div>
     <div class="img-grid" id="resultGrid"></div>
     <div class="btn-row" style="margin-top:12px;margin-bottom:0;">
-      <button class="btn-secondary" onclick="handleSaveAll()">💾 保存全部</button>
+      <button class="btn-secondary" onclick="handleRegenerate()">↻ 重新生成</button>
+	      <button class="btn-secondary" onclick="handleSaveAll()">💾 保存全部</button>
     </div>
   </div>
 </div>
@@ -303,7 +304,7 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
     
     <div class="form-label">API Key</div>
     <div class="form-input">
-      <input type="password" id="apiKey" value="sk-your-api-key-here" style="background:transparent;border:none;color:#8B8B9D;font-size:13px;width:100%;outline:none;font-family:inherit;">
+      <input type="password" id="apiKey" value="" placeholder="sk-xxx..." style="background:transparent;border:none;color:#8B8B9D;font-size:13px;width:100%;outline:none;font-family:inherit;">
       <button style="background:none;border:none;color:#8B8B9D;cursor:pointer;font-size:14px;" onclick="toggleApiKey()">👁</button>
     </div>
     
@@ -492,6 +493,14 @@ function selectModel(el){
   }
 })();
 
+// Load saved API config
+(function(){
+  var ep=localStorage.getItem('gpt-image2-api-endpoint');
+  var key=localStorage.getItem('gpt-image2-api-key');
+  if(ep) document.getElementById('apiEndpoint').value=ep;
+  if(key && key!='' && key!='sk-your-api-key-here') document.getElementById('apiKey').value=key;
+})();
+
 function usePrompt(btn){
   const card=btn.closest('.prompt-card');
   const title=card.querySelector('.prompt-title').textContent;
@@ -553,13 +562,24 @@ async function handleGenerate(){
   if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
 
   const apiKey=document.getElementById('apiKey').value.trim();
-  if(!apiKey || apiKey==='sk-your-api-key-here'){
+  if(!apiKey || apiKey===''){
     showToast('⚠️ 请先在 API 设置中填写 API Key');
     switchTab('api');
     return;
   }
 
   const count=parseInt(document.querySelector('#countChips .chip.active')?.dataset.value||'1');
+
+  // Save last generation params for regenerate
+  lastGenParams={
+    prompt:prompt,
+    referenceImageDataUrl:referenceImageDataUrl,
+    count:count,
+    ratio:(document.querySelector('#ratioChips .chip.active')?.dataset.value||'auto'),
+    size:(document.querySelector('#sizeChips .chip.active')?.dataset.value||'auto'),
+    quality:(document.querySelector('#qualityChips .chip.active')?.dataset.value||'auto'),
+    format:(document.querySelector('#formatChips .chip.active')?.dataset.value||'png')
+  };
 
   // Show result section with loading placeholders immediately
   const section=document.getElementById('resultSection');
@@ -793,6 +813,7 @@ loadGallery();
 
 // --- Image Upload (for reference image) ---
 let referenceImageDataUrl=null; // stores the reference image for generation
+let lastGenParams=null; // stores last generation params for regenerate
 
 document.getElementById('fileInput').addEventListener('change',function(e){
   const file=e.target.files[0];
@@ -816,6 +837,30 @@ document.getElementById('fileInput').addEventListener('change',function(e){
 
 function handleUpload(){
   document.getElementById('fileInput').click();
+}
+
+function handleRegenerate(){
+  if(!lastGenParams){showToast('没有可重新生成的参数');return;}
+  // Restore settings
+  if(lastGenParams.prompt) document.getElementById('promptInput').value=lastGenParams.prompt;
+  if(lastGenParams.referenceImageDataUrl){
+    referenceImageDataUrl=lastGenParams.referenceImageDataUrl;
+    var p=document.getElementById('refPreview'),i=document.getElementById('refImage');
+    i.src=referenceImageDataUrl;p.style.display='block';
+  }
+  // Restore chips
+  var chipSets={'ratioChips':lastGenParams.ratio,'sizeChips':lastGenParams.size,'qualityChips':lastGenParams.quality,'formatChips':lastGenParams.format};
+  for(var setId in chipSets){
+    var val=chipSets[setId];
+    if(val){
+      var chips=document.getElementById(setId).querySelectorAll('.chip');
+      for(var j=0;j<chips.length;j++){
+        chips[j].classList.toggle('active',chips[j].dataset.value===val);
+      }
+    }
+  }
+  showToast('↻ 已恢复上次参数，开始重新生成');
+  handleGenerate();
 }
 
 async function handleSaveAll(){
@@ -1067,6 +1112,8 @@ function toggleApiKey(){
 }
 
 function saveApiConfig(){
+  localStorage.setItem('gpt-image2-api-endpoint', document.getElementById('apiEndpoint').value.trim());
+  localStorage.setItem('gpt-image2-api-key', document.getElementById('apiKey').value.trim());
   showToast('API 配置已保存');
 }
 
@@ -1080,7 +1127,7 @@ async function testConnection(){
   endpoint=endpoint.replace(/\/images\/?$/,'');
   const key=document.getElementById('apiKey').value.trim();
 
-  if(!key || key==='sk-your-api-key-here'){
+  if(!key || key===''){
     showToast('⚠️ 请先填入有效的 API Key');
     btn.innerHTML=origText;
     btn.style.pointerEvents='auto';
