@@ -247,40 +247,23 @@ body.light-mode .img-cell.loading .loading-text{color:#9E9EB0;}
 <div class="page" id="page-prompts">
   <div class="header">
     <div class="header-title">提示词收藏</div>
-    <button class="header-btn" style="background:#7C3AED;color:#fff;">+</button>
+    <button class="header-btn" style="background:#7C3AED;color:#fff;font-size:18px;font-weight:600;padding:0 14px;" onclick="addPrompt()">+ 收藏</button>
   </div>
-  
+
   <div class="chip-row" style="margin-bottom:16px;" id="promptCategory">
     <button class="chip active" data-cat="all">全部</button>
     <button class="chip" data-cat="scifi">科幻</button>
     <button class="chip" data-cat="landscape">风景</button>
     <button class="chip" data-cat="portrait">人物</button>
     <button class="chip" data-cat="abstract">抽象</button>
+    <button class="chip" data-cat="custom">自定义</button>
   </div>
-  
-  <div class="prompt-card card" data-cat="scifi">
-    <div class="prompt-title">未来城市日落，赛博朋克风</div>
-    <div class="prompt-desc">A futuristic cyberpunk cityscape at golden hour, neon lights reflecting on wet streets, volumetric lighting, ultra detailed, 8k render...</div>
-    <div class="prompt-footer">
-      <span class="prompt-tag">科幻</span>
-      <button class="btn-use" onclick="usePrompt(this)">使用</button>
-    </div>
-  </div>
-  <div class="prompt-card card" data-cat="landscape">
-    <div class="prompt-title">极简山水，水墨写意风</div>
-    <div class="prompt-desc">Traditional Chinese ink wash painting, misty mountains and a lone pine tree, minimalist composition, zen aesthetic, rice paper texture...</div>
-    <div class="prompt-footer">
-      <span class="prompt-tag" style="color:#EC4899;">风景</span>
-      <button class="btn-use" onclick="usePrompt(this)">使用</button>
-    </div>
-  </div>
-  <div class="prompt-card card" data-cat="abstract">
-    <div class="prompt-title">梦幻森林，童话光影</div>
-    <div class="prompt-desc">Enchanted forest with glowing mushrooms and fairy lights, soft bokeh, warm golden hour rays through trees, magical atmosphere...</div>
-    <div class="prompt-footer">
-      <span class="prompt-tag" style="color:#6366F1;">抽象</span>
-      <button class="btn-use" onclick="usePrompt(this)">使用</button>
-    </div>
+
+  <div id="promptContainer"></div>
+  <div id="promptEmpty" style="text-align:center;padding:40px 0;color:#6B6B7B;font-size:14px;">
+    <p style="font-size:40px;margin-bottom:12px;">📝</p>
+    <p>暂无收藏的提示词</p>
+    <p style="font-size:12px;margin-top:8px;">在首页输入提示词后点击右上角「+ 收藏」</p>
   </div>
 </div>
 
@@ -746,6 +729,93 @@ function toggleTheme(){
     document.getElementById('themeToggle').style.justifyContent='flex-start';
   }
 })();
+
+// --- Prompt Collection (localStorage) ---
+function getPrompts(){
+  try{return JSON.parse(localStorage.getItem('gpt-image2-prompts'))||[];}catch(e){return[];}
+}
+function savePrompts(prompts){
+  localStorage.setItem('gpt-image2-prompts',JSON.stringify(prompts));
+}
+
+function renderPrompts(cat){
+  var prompts=getPrompts();
+  var container=document.getElementById('promptContainer');
+  var empty=document.getElementById('promptEmpty');
+  container.innerHTML='';
+  var filtered=cat&&cat!=='all'?prompts.filter(function(p){return p.cat===cat;}):prompts;
+  if(filtered.length===0){empty.style.display='block';return;}
+  empty.style.display='none';
+  filtered.forEach(function(p,i){
+    container.insertAdjacentHTML('beforeend',
+      '<div class="prompt-card card" data-cat="'+p.cat+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+          '<div class="prompt-title">'+escHtml(p.title||p.desc.slice(0,30))+'</div>'+
+          '<button onclick="deletePrompt('+p._id+')" style="background:none;border:none;color:#EF4444;font-size:16px;cursor:pointer;padding:2px 6px;">×</button>'+
+        '</div>'+
+        '<div class="prompt-desc">'+escHtml(p.desc)+'</div>'+
+        '<div class="prompt-footer">'+
+          '<span class="prompt-tag">'+p.cat+'</span>'+
+          '<button class="btn-use" onclick="usePrompt(this)" data-prompt="'+escHtml(p.desc)+'">使用</button>'+
+        '</div>'+
+      '</div>');
+  });
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function addPrompt(){
+  switchTab('home');
+  setTimeout(function(){
+    var input=document.getElementById('promptInput');
+    var text=input.value.trim();
+    if(!text){showToast('请先在首页输入提示词');return;}
+    var prompts=getPrompts();
+    // Don't add duplicates
+    if(prompts.some(function(p){return p.desc===text;})){showToast('该提示词已收藏');return;}
+    var cat='custom';
+    // Detect category from content
+    if(/科幻|赛博朋克|未来|机械|霓虹/i.test(text)) cat='scifi';
+    else if(/山水|风景|自然|山|水|森林|海洋/i.test(text)) cat='landscape';
+    else if(/人物|肖像|人像|美女|帅哥/i.test(text)) cat='portrait';
+    else if(/抽象|梦幻|几何|线条/i.test(text)) cat='abstract';
+    // Find a unique ID
+    var maxId=0;
+    prompts.forEach(function(p){if(p._id>maxId)maxId=p._id;});
+    prompts.push({_id:maxId+1,title:text.slice(0,40),desc:text,cat:cat,created:Date.now()});
+    savePrompts(prompts);
+    renderPrompts(document.querySelector('#promptCategory .chip.active')?.dataset?.cat||'all');
+    showToast('✅ 已收藏提示词');
+  },200);
+}
+
+function deletePrompt(id){
+  var prompts=getPrompts().filter(function(p){return p._id!==id;});
+  savePrompts(prompts);
+  renderPrompts(document.querySelector('#promptCategory .chip.active')?.dataset?.cat||'all');
+  showToast('已删除');
+}
+
+// Hook into existing category filter
+var origCatClick=document.getElementById('promptCategory').onclick;
+document.getElementById('promptCategory').addEventListener('click',function(e){
+  if(e.target.classList.contains('chip')){
+    document.getElementById('promptCategory').querySelectorAll('.chip').forEach(function(c){c.classList.remove('active');});
+    e.target.classList.add('active');
+    renderPrompts(e.target.dataset.cat);
+  }
+});
+
+// Override usePrompt to handle dynamic prompts
+function usePrompt(btn){
+  var prompt=btn.dataset.prompt||btn.closest('.prompt-card').querySelector('.prompt-desc').textContent;
+  switchTab('home');
+  setTimeout(function(){document.getElementById('promptInput').value=prompt;},100);
+  showToast('已填入提示词');
+}
+
+// Load prompts on startup
+(function(){renderPrompts('all');})();
 
 // --- IndexedDB Gallery Persistence ---
 function openGalleryDB(){
