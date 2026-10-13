@@ -540,6 +540,37 @@ function calculateImageSize(tier, ratio){
   const h=rw>rh?roundToMultiple(longSide*rh/rw,SIZE_MULTIPLE):longSide;
   return normalizeImageSize(w,h);
 }
+
+// --- 响应兼容层：把 API 返回项统一转成 base64 ---
+// 多数中转站会忽略 response_format: "b64_json"，只返回 data[].url（通常挂在 pub-*.r2.dev 上）。
+// 这里统一处理：优先 b64_json；否则把 url 下载下来转 base64；两者都没有才返回空串。
+function blobToB64(blob){
+  return new Promise(function(resolve,reject){
+    var f=new FileReader();
+    f.onload=function(){resolve(String(f.result).split(',')[1]||'');};
+    f.onerror=reject;
+    f.readAsDataURL(blob);
+  });
+}
+async function urlToB64(url,timeoutMs){
+  var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var timer=setTimeout(function(){if(ctrl)try{ctrl.abort();}catch(e){}},timeoutMs||120000);
+  try{
+    var r=await fetch(url,ctrl?{signal:ctrl.signal}:undefined);
+    if(!r.ok)return '';
+    return await blobToB64(await r.blob());
+  }catch(e){
+    console.warn('image url -> base64 failed:',e&&e.message);
+    return '';
+  }finally{clearTimeout(timer);}
+}
+async function itemToB64(item){
+  if(!item)return '';
+  if(item.b64_json)return item.b64_json;
+  if(item.url)return await urlToB64(item.url,120000);
+  return '';
+}
+
 async function handleGenerate(){
   const prompt=document.getElementById('promptInput').value.trim();
   if(!prompt && !referenceImageDataUrl){showToast('请输入提示词或上传参考图');return;}
@@ -652,11 +683,15 @@ async function handleGenerate(){
 	    if(data.data && data.data.length>0){
 	      var imgIds=[],imgBlobs=[];
 	      for(var i=0;i<data.data.length;i++){
-	        var b=data.data[i].b64_json||'';
+	        var b=await itemToB64(data.data[i]);if(!b)continue;
 	        imgIds.push(storeImage(b));
 	        imgBlobs.push(getStoredImage(imgIds[i]));
 	      }
-	      grid.innerHTML=imgIds.map(function(id,j){
+	      if(imgIds.length===0){
+        grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#EF4444;font-size:14px;">⚠️ 未取到图片数据<br><span style="font-size:12px;color:#8B8B9D;margin-top:8px;display:block;">返回里既没有 b64_json 也没有 url，或图片 URL 下载失败</span></div>';
+        return;
+      }
+      grid.innerHTML=imgIds.map(function(id,j){
 	        return '<div class="img-cell" style="padding:2px;background:transparent;cursor:pointer;animation:fadeIn 0.3s ease;">'+
 	          '<img src="'+imgBlobs[j]+'" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onclick="openViewer('+id+',\''+finalSize+'\')">'+
 	          '<span style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:6px;font-size:10px;color:#fff;z-index:2;">'+finalSize+'</span>'+
@@ -680,7 +715,7 @@ async function handleGenerate(){
       for(var i=0;i<data.data.length;i++){
         if(i>=4)break;
         var img=data.data[i];
-        var b64=img.b64_json||'';
+        var b64=await itemToB64(img);if(!b64)continue;
         var id=storeImage(b64);
         var blobUrl=getStoredImage(id);
         gGrid.insertAdjacentHTML('afterbegin','<div class="gallery-item" style="overflow:hidden;cursor:pointer;" onclick="openViewer('+id+',\''+allSizes+'\')">'+
@@ -698,7 +733,7 @@ async function handleGenerate(){
     grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#EF4444;font-size:14px;">
       ⚠️ 网络错误<br><span style="font-size:12px;color:#8B8B9D;margin-top:8px;display:block;">${e.message}</span>
     </div>`;
-    showToast('⚠️ 网络错误: '+e.message);
+    showToast('⚠️ 网络错误: '+(e&&e.message||e)+'（Failed to fetch 多为跨域被拦或网络不通）');
   }
 }
 
@@ -945,8 +980,10 @@ async function handleSaveAll(){
   for(var i=0;i<ids.length;i++){
     var b64=imageStore[ids[i]].b64;
     try {
-      var resp=await fetch('data:image/png;base64,'+b64);
-      var blob=await resp.blob();
+      var byteChars=atob(b64);
+      var byteArr=new Uint8Array(byteChars.length);
+      for(var bi=0;bi<byteChars.length;bi++)byteArr[bi]=byteChars.charCodeAt(bi);
+      var blob=new Blob([byteArr],{type:'image/png'});
       var url=URL.createObjectURL(blob);
       var a=document.createElement('a');
       a.href=url;a.download='gpt-image2-'+(i+1)+'-'+Date.now()+'.png';a.style.display='none';
@@ -1205,17 +1242,9 @@ async function testConnection(){
   }
 
   try {
-    const resp=await fetch(endpoint.replace(/\/+$/,'')+'/images/generations', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':'Bearer '+key
-      },
-      body:JSON.stringify({
-        model: document.getElementById('selectedModel').textContent,
-        prompt:'test connection ping',
-        n:1
-      })
+    const resp=await fetch(endpoint.replace(/\/+$/,'')+'/models', {
+      method:'GET',
+      headers:{'Authorization':'Bearer '+key}
     });
 
     if(resp.ok){
@@ -1226,11 +1255,11 @@ async function testConnection(){
       saveApiConfig();
     } else {
       const err=await resp.text();
-      showToast('⚠️ 连接失败: '+ (err.slice(0,60) || resp.statusText));
+      showToast('⚠️ 连接失败 ['+resp.status+']: '+((err||resp.statusText||'').slice(0,80)));
       document.querySelector('.status-dot').style.background='#EF4444';
     }
   } catch(e){
-    showToast('⚠️ 网络错误: '+e.message);
+    showToast('⚠️ 网络错误: '+(e&&e.message||e)+'（Failed to fetch 多为跨域被拦或网络不通）');
     document.querySelector('.status-dot').style.background='#EF4444';
   }
 
