@@ -27,11 +27,16 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android SDK components
         run: |
-          yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>&1 || echo "Components installed"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          for i in 1 2 3; do
+            sdkmanager "platforms;android-34" "build-tools;34.0.0" && break
+            echo "sdkmanager attempt $i failed, retrying..."
+            sleep 10
+          done
 
       - name: Install dependencies
         run: npm install
